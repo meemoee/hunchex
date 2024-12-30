@@ -570,6 +570,43 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+app.delete('/api/orders/:orderId', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const userId = verifyToken(token);
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const { orderId } = req.params;
+
+  try {
+    // Verify the order belongs to the user
+    const orderCheck = await pool.query(
+      'SELECT user_id FROM active_orders WHERE id = $1',
+      [orderId]
+    );
+
+    if (orderCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    if (orderCheck.rows[0].user_id !== userId) {
+      return res.status(403).json({ error: 'Not authorized to cancel this order' });
+    }
+
+    // Cancel the order
+    await pool.query(
+      'UPDATE active_orders SET status = $1 WHERE id = $2',
+      ['cancelled', orderId]
+    );
+
+    res.json({ message: 'Order cancelled successfully' });
+  } catch (error) {
+    console.error('Error cancelling order:', error);
+    res.status(500).json({ error: 'Error cancelling order', details: error.toString() });
+  }
+});
+
 app.post('/api/holdings', async (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   const userId = verifyToken(token);
