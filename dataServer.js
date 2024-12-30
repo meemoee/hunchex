@@ -156,28 +156,6 @@ const UNIQUE_TICKERS_UPDATE_INTERVAL = 15 * 60 * 1000;
 app.use(cors());
 app.use(express.json());
 
-async function createUser(username, password) {
-  const hashedPassword = await bcrypt.hash(password, 10);
-  const result = await sql`
-    INSERT INTO users (username, password) 
-    VALUES (${username}, ${hashedPassword}) 
-    RETURNING id
-  `;
-  return result[0].id;
-}
-
-async function getUserByUsername(username) {
-  const result = await sql`
-    SELECT * FROM users 
-    WHERE username = ${username}
-  `;
-  return result[0];
-}
-
-async function invalidateHoldingsCache(userId) {
-  const cacheKey = `holdings:${userId}`;
-  await redis.del(cacheKey);
-}
 
 async function addHolding(userId, marketId, position, amount, price) {
   const client = await pool.connect();
@@ -561,27 +539,6 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-app.post('/api/invalidate-holdings', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  try {
-    await invalidateHoldingsCache(userId);
-    res.json({ message: 'Cache invalidated successfully' });
-  } catch (error) {
-    console.error('Error invalidating holdings cache:', error);
-    res.status(500).json({ error: 'Error invalidating cache' });
-  }
-});
-
-app.delete('/api/orders/:orderId', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
 
   const { orderId } = req.params;
 
@@ -699,12 +656,8 @@ app.get('/api/active-orders', async (req, res) => {
   }
 });
 
-app.get('/api/holdings', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.get('/api/holdings', checkJwt, async (req, res) => {
+  const userId = req.auth.payload.sub;
   try {
     const holdings = await getHoldings(userId);
     res.json(holdings);
@@ -2051,14 +2004,8 @@ app.post('/api/save-qa-tree', checkJwt, async (req, res) => {
 });
 
 // Delete a QA tree
-app.delete('/api/delete-qa-tree/:treeId', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  const { treeId } = req.params;
-  
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.delete('/api/delete-qa-tree/:treeId', checkJwt, async (req, res) => {
+  const userId = req.auth.payload.sub;
 
   const client = await pool.connect();
   try {
@@ -2093,15 +2040,8 @@ app.delete('/api/delete-qa-tree/:treeId', async (req, res) => {
 });
 
 // Update QA tree title
-app.patch('/api/update-qa-tree-title/:treeId', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  const { treeId } = req.params;
-  const { title } = req.body;
-  
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.patch('/api/update-qa-tree-title/:treeId', checkJwt, async (req, res) => {
+  const userId = req.auth.payload.sub;
 
   try {
     const result = await pool.query(
