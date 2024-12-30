@@ -25,17 +25,6 @@ const axios = require('axios');
 const { OpenAI } = require('openai');
 const { auth, claimCheck } = require('express-oauth2-jwt-bearer');
 
-// Auth0 middleware configuration
-const checkJwt = auth({
-  audience: process.env.AUTH0_AUDIENCE,
-  issuerBaseURL: process.env.AUTH0_ISSUER_URL,
-  tokenSigningAlg: 'RS256'
-});
-
-// Helper to get user ID from Auth0 token
-const getUserIdFromToken = (req) => {
-  return req.auth.sub; // Auth0 user ID from token
-};
 const { v4: uuidv4 } = require('uuid');
 const fetch = require('node-fetch');
 const clients = new Map(); // Map of clientId to WebSocket
@@ -81,12 +70,6 @@ const {
 
 const sql = neon(process.env.DATABASE_URL);
 
-// Auth0 configuration
-const checkJwt = auth({
-  audience: process.env.AUTH0_AUDIENCE,
-  issuerBaseURL: process.env.AUTH0_ISSUER_BASE_URL,
-  tokenSigningAlg: 'RS256'
-});
 
 // OpenAI API key and client
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -501,11 +484,7 @@ app.post('/api/submit-order', checkJwt, async (req, res) => {
 });
 
 app.post('/api/invalidate-holdings', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  const userId = req.auth.sub;
   try {
     await invalidateHoldingsCache(userId);
     res.json({ message: 'Cache invalidated successfully' });
@@ -1801,13 +1780,8 @@ app.post('/api/run-getnewsfresh', async (req, res) => {
 // Add these endpoints to your dataServer.js
 
 // Fetch user's saved QA trees
-app.get('/api/qa-trees', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.get('/api/qa-trees', checkJwt, async (req, res) => {
+  const userId = req.auth.sub;
 
   try {
     const query = `
@@ -1830,14 +1804,9 @@ app.get('/api/qa-trees', async (req, res) => {
 });
 
 // Fetch specific QA tree details
-app.get('/api/qa-tree/:treeId', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
+app.get('/api/qa-tree/:treeId', checkJwt, async (req, res) => {
+  const userId = req.auth.sub;
   const { treeId } = req.params;
-  
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
 
   try {
     // Recursive CTE to fetch the entire tree structure
