@@ -614,7 +614,7 @@ app.get('/api/active-orders', checkJwt, async (req, res) => {
 });
 
 app.get('/api/holdings', checkJwt, async (req, res) => {
-  const userId = getUserIdFromToken(req);
+  const userId = req.auth.sub;
   try {
     const holdings = await getHoldings(userId);
     res.json(holdings);
@@ -625,7 +625,7 @@ app.get('/api/holdings', checkJwt, async (req, res) => {
 });
 
 app.get('/api/balance', checkJwt, async (req, res) => {
-  const userId = getUserIdFromToken(req);
+  const userId = req.auth.sub;
   try {
     const balance = await getUserBalance(userId);
     res.json({ balance });
@@ -636,7 +636,7 @@ app.get('/api/balance', checkJwt, async (req, res) => {
 });
 
 app.get('/api/value-history', checkJwt, async (req, res) => {
-  const userId = getUserIdFromToken(req);
+  const userId = req.auth.sub;
   const { startDate, endDate } = req.query;
   try {
     const history = await getUserValueHistory(userId, startDate, endDate);
