@@ -549,7 +549,7 @@ async function updateHolding(holdingId, position, amount) {
 }
 
 app.get('/api/active-orders', checkJwt, async (req, res) => {
-  const userId = getUserIdFromToken(req);
+  const userId = req.auth.sub;
 
   try {
     const query = `
