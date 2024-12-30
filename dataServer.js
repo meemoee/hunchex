@@ -39,7 +39,6 @@ const PolymarketStream = require('./polymarketStream');
 const KalshiStream = require('./kalshiStream');
 const axios = require('axios');
 const { OpenAI } = require('openai');
-const { auth } = require('express-oauth2-jwt-bearer');
 
 const { v4: uuidv4 } = require('uuid');
 const fetch = require('node-fetch');
