@@ -23,7 +23,19 @@ const PolymarketStream = require('./polymarketStream');
 const KalshiStream = require('./kalshiStream');
 const axios = require('axios');
 const { OpenAI } = require('openai');
-const { auth } = require('express-oauth2-jwt-bearer');
+const { auth, claimCheck } = require('express-oauth2-jwt-bearer');
+
+// Auth0 middleware configuration
+const checkJwt = auth({
+  audience: process.env.AUTH0_AUDIENCE,
+  issuerBaseURL: process.env.AUTH0_ISSUER_URL,
+  tokenSigningAlg: 'RS256'
+});
+
+// Helper to get user ID from Auth0 token
+const getUserIdFromToken = (req) => {
+  return req.auth.sub; // Auth0 user ID from token
+};
 const { v4: uuidv4 } = require('uuid');
 const fetch = require('node-fetch');
 const clients = new Map(); // Map of clientId to WebSocket
@@ -252,20 +264,6 @@ async function getHoldings(userId) {
   return result.rows;
 }
 
-function generateToken(userId) {
-  const accessToken = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '24h' });
-  const refreshToken = jwt.sign({ userId }, JWT_REFRESH_SECRET, { expiresIn: '30d' });
-  return { accessToken, refreshToken };
-}
-
-function verifyToken(token) {
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    return decoded.userId;
-  } catch (error) {
-    return null;
-  }
-}
 
 
 
@@ -592,12 +590,8 @@ async function updateHolding(holdingId, position, amount) {
   await pool.query(query, values);
 }
 
-app.get('/api/active-orders', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.get('/api/active-orders', checkJwt, async (req, res) => {
+  const userId = getUserIdFromToken(req);
 
   try {
     const query = `
@@ -667,12 +661,8 @@ app.get('/api/balance', checkJwt, async (req, res) => {
   }
 });
 
-app.get('/api/value-history', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.get('/api/value-history', checkJwt, async (req, res) => {
+  const userId = getUserIdFromToken(req);
   const { startDate, endDate } = req.query;
   try {
     const history = await getUserValueHistory(userId, startDate, endDate);
