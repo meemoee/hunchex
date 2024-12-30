@@ -250,20 +250,6 @@ async function getHoldings(userId) {
   return result.rows;
 }
 
-function generateToken(userId) {
-  const accessToken = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '24h' });
-  const refreshToken = jwt.sign({ userId }, JWT_REFRESH_SECRET, { expiresIn: '30d' });
-  return { accessToken, refreshToken };
-}
-
-function verifyToken(token) {
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    return decoded.userId;
-  } catch (error) {
-    return null;
-  }
-}
 
 
 
@@ -420,14 +406,9 @@ app.post('/api/register', async (req, res) => {
 
 // Add new endpoint for order submission
 
-app.post('/api/submit-order', async (req, res) => {
+app.post('/api/submit-order', checkJwt, async (req, res) => {
   const { marketId, outcome, side, size, price } = req.body;
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  const userId = req.auth.payload.sub;
 
   try {
     // Get market info including token IDs
@@ -568,12 +549,8 @@ app.post('/api/login', async (req, res) => {
     console.error('Error cancelling order:', error);
     res.status(500).json({ error: 'Error cancelling order', details: error.toString() });
 
-app.post('/api/holdings', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.post('/api/holdings', checkJwt, async (req, res) => {
+  const userId = req.auth.payload.sub;
   const { marketId, position, amount, price } = req.body;
   try {
     await addHolding(userId, marketId, position, amount, price);
@@ -601,12 +578,8 @@ async function updateHolding(holdingId, position, amount) {
   await pool.query(query, values);
 }
 
-app.get('/api/active-orders', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.get('/api/active-orders', checkJwt, async (req, res) => {
+  const userId = req.auth.payload.sub;
 
   try {
     const query = `
@@ -665,12 +638,8 @@ app.get('/api/holdings', checkJwt, async (req, res) => {
   }
 });
 
-app.get('/api/balance', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.get('/api/balance', checkJwt, async (req, res) => {
+  const userId = req.auth.payload.sub;
   try {
     const balance = await getUserBalance(userId);
     res.json({ balance });
@@ -680,12 +649,8 @@ app.get('/api/balance', async (req, res) => {
   }
 });
 
-app.get('/api/value-history', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.get('/api/value-history', checkJwt, async (req, res) => {
+  const userId = req.auth.payload.sub;
   const { startDate, endDate } = req.query;
   try {
     const history = await getUserValueHistory(userId, startDate, endDate);
@@ -1853,14 +1818,9 @@ app.get('/api/qa-trees', checkJwt, async (req, res) => {
 });
 
 // Fetch specific QA tree details
-app.get('/api/qa-tree/:treeId', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
+app.get('/api/qa-tree/:treeId', checkJwt, async (req, res) => {
+  const userId = req.auth.payload.sub;
   const { treeId } = req.params;
-  
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
 
   try {
     // Recursive CTE to fetch the entire tree structure
