@@ -1,3 +1,11 @@
+// Validate required Auth0 environment variables
+if (!process.env.AUTH0_ISSUER_URL) {
+  throw new Error('AUTH0_ISSUER_URL is required');
+}
+if (!process.env.AUTH0_AUDIENCE) {
+  throw new Error('AUTH0_AUDIENCE is required');
+}
+
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -157,6 +165,14 @@ const UNIQUE_TICKERS_UPDATE_INTERVAL = 15 * 60 * 1000;
 
 app.use(cors());
 app.use(express.json());
+
+// Auth0 error handling middleware
+app.use((err, req, res, next) => {
+  if (err.name === 'UnauthorizedError') {
+    return res.status(401).json({ error: 'Invalid token or no token provided' });
+  }
+  next(err);
+});
 
 async function invalidateHoldingsCache(userId) {
   const cacheKey = `holdings:${userId}`;
@@ -477,7 +493,7 @@ app.post('/api/submit-order', checkJwt, async (req, res) => {
   }
 });
 
-app.post('/api/invalidate-holdings', async (req, res) => {
+app.post('/api/invalidate-holdings', checkJwt, async (req, res) => {
   const userId = req.auth.sub;
   try {
     await invalidateHoldingsCache(userId);
@@ -1619,7 +1635,7 @@ app.get('/api/unique_tickers', async (req, res) => {
 });
 
 
-app.post('/api/run-summary-script', async (req, res) => {
+app.post('/api/run-summary-script', checkJwt, async (req, res) => {
   const { marketId, clientId } = req.body;
 
   if (!marketId || !clientId) {
@@ -1848,7 +1864,7 @@ app.get('/api/qa-tree/:treeId', checkJwt, async (req, res) => {
   }
 });
 
-app.post('/api/save-qa-tree', async (req, res) => {
+app.post('/api/save-qa-tree', checkJwt, async (req, res) => {
   const userId = req.auth.sub;
 
   const { marketId, treeData } = req.body;
@@ -2398,7 +2414,7 @@ app.get('/api/related-markets/:marketId', async (req, res) => {
   }
 });
 
-app.post('/api/prediction-trade-ideas', async (req, res) => {
+app.post('/api/prediction-trade-ideas', checkJwt, async (req, res) => {
   console.log('Received POST request to /api/prediction-trade-ideas');
   const { query } = req.body;
   console.log(`Received prediction trade ideas request for query: ${query}`);
