@@ -479,12 +479,8 @@ app.post('/api/invalidate-holdings', async (req, res) => {
   }
 });
 
-app.delete('/api/orders/:orderId', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.delete('/api/orders/:orderId', checkJwt, async (req, res) => {
+  const userId = req.auth.sub;
 
   const { orderId } = req.params;
 
@@ -943,30 +939,6 @@ app.get('/api/news_results', async (req, res) => {
   }
 });
 
-async function loginToKalshi() {
-  const loginUrl = `${KALSHI_API_BASE_URL}/login`;
-  const loginPayload = {
-    email: KALSHI_EMAIL,
-    password: KALSHI_PASSWORD
-  };
-  
-  try {
-    const loginResponse = await axios.post(loginUrl, loginPayload, {
-      headers: { 'Content-Type': 'application/json' }
-    });
-    if (loginResponse.status !== 200) {
-      throw new Error(`Login failed: ${loginResponse.status} ${loginResponse.statusText}`);
-    }
-    const loginData = loginResponse.data;
-    return {
-      token: loginData.token,
-      userId: loginData.member_id
-    };
-  } catch (error) {
-    console.error('Kalshi login error:', error);
-    throw error;
-  }
-}
 
 // Initialize Polymarket orderbook client
 const polyOrderbook = new PolyOrderbook();
