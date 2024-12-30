@@ -6,6 +6,14 @@ const moment = require('moment');
 const { spawn, exec } = require('child_process');
 const { processFinalResponse } = require('./perpanalysis');
 const PolyOrderbook = require('./polyOrderbook');
+const { auth } = require('express-oauth2-jwt-bearer');
+
+// Auth0 middleware configuration
+const checkJwt = auth({
+  audience: process.env.AUTH0_AUDIENCE,
+  issuerBaseURL: process.env.AUTH0_ISSUER_URL,
+  tokenSigningAlg: 'RS256'
+});
 
 // Initialize PostgreSQL pool for complex operations
 const pool = new Pool({
@@ -29,12 +37,6 @@ const { v4: uuidv4 } = require('uuid');
 const fetch = require('node-fetch');
 const clients = new Map(); // Map of clientId to WebSocket
 
-// Auth0 configuration
-const checkJwt = auth({
-  audience: process.env.AUTH0_AUDIENCE,
-  issuerBaseURL: process.env.AUTH0_ISSUER_URL,
-  tokenSigningAlg: 'RS256'
-});
 
 // Logger setup
 const logger = {
@@ -397,7 +399,7 @@ const runJavaScriptScript = (scriptName, args) => {
 
 app.post('/api/submit-order', checkJwt, async (req, res) => {
   const { marketId, outcome, side, size, price } = req.body;
-  const userId = getUserIdFromToken(req);
+  const userId = req.auth.sub;
 
   try {
     // Get market info including token IDs
