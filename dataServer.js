@@ -515,6 +515,8 @@ app.post('/api/submit-order', checkJwt, async (req, res) => {
   } catch (error) {
     console.error('Error cancelling order:', error);
     res.status(500).json({ error: 'Error cancelling order', details: error.toString() });
+  }
+});
 
 app.post('/api/holdings', checkJwt, async (req, res) => {
   const userId = req.auth.payload.sub;
@@ -2634,3 +2636,4 @@ async function getLastTradedPrice(marketId) {
   const result = await pool.query(query, values);
   return result.rows[0]?.last_traded_price || null;
 }
+});
