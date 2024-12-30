@@ -486,39 +486,6 @@ app.post('/api/submit-order', checkJwt, async (req, res) => {
   }
 });
 
-app.post('/api/refresh-token', async (req, res) => {
-  const { refreshToken } = req.body;
-  if (!refreshToken) {
-    return res.status(401).json({ error: 'Refresh token required' });
-  }
-
-  try {
-    const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET);
-    const newTokens = generateToken(decoded.userId);
-    res.json(newTokens);
-  } catch (error) {
-    res.status(401).json({ error: 'Invalid refresh token' });
-  }
-});
-
-app.post('/api/login', async (req, res) => {
-  const { username, password } = req.body;
-  try {
-    const user = await getUserByUsername(username);
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid username or password' });
-    }
-    const isValidPassword = await bcrypt.compare(password, user.password);
-    if (!isValidPassword) {
-      return res.status(401).json({ error: 'Invalid username or password' });
-    }
-    const tokens = generateToken(user.id);
-    res.json({ ...tokens, username: user.username });
-  } catch (error) {
-    console.error('Error in /api/login:', error);
-    res.status(500).json({ error: 'Error logging in', details: error.toString() });
-  }
-});
 
 
   const { orderId } = req.params;
