@@ -23,11 +23,18 @@ const PolymarketStream = require('./polymarketStream');
 const KalshiStream = require('./kalshiStream');
 const axios = require('axios');
 const { OpenAI } = require('openai');
-const { auth, claimCheck } = require('express-oauth2-jwt-bearer');
+const { auth } = require('express-oauth2-jwt-bearer');
 
 const { v4: uuidv4 } = require('uuid');
 const fetch = require('node-fetch');
 const clients = new Map(); // Map of clientId to WebSocket
+
+// Auth0 configuration
+const checkJwt = auth({
+  audience: process.env.AUTH0_AUDIENCE,
+  issuerBaseURL: process.env.AUTH0_ISSUER_URL,
+  tokenSigningAlg: 'RS256'
+});
 
 // Logger setup
 const logger = {
