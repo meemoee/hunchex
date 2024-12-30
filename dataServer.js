@@ -50,8 +50,14 @@ const { Decimal } = require('decimal.js');
 const app = express();
 const port = 3001;
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'your_refresh_secret';
+const { auth } = require('express-oauth2-jwt-bearer');
+
+// Auth0 configuration
+const checkJwt = auth({
+  audience: 'https://dev-agralk5no1ha4dyd.us.auth0.com/api/v2/',
+  issuerBaseURL: 'https://dev-agralk5no1ha4dyd.us.auth0.com/',
+  tokenSigningAlg: 'RS256'
+});
 
 
 const {
@@ -1872,13 +1878,8 @@ app.post('/api/run-getnewsfresh', async (req, res) => {
 // Add these endpoints to your dataServer.js
 
 // Fetch user's saved QA trees
-app.get('/api/qa-trees', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.get('/api/qa-trees', checkJwt, async (req, res) => {
+  const userId = req.auth.payload.sub;
 
   try {
     const query = `
@@ -1988,13 +1989,8 @@ app.get('/api/qa-tree/:treeId', async (req, res) => {
   }
 });
 
-app.post('/api/save-qa-tree', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.post('/api/save-qa-tree', checkJwt, async (req, res) => {
+  const userId = req.auth.payload.sub;
 
   const { marketId, treeData } = req.body;
 
