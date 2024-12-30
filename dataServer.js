@@ -516,12 +516,8 @@ app.delete('/api/orders/:orderId', async (req, res) => {
   }
 });
 
-app.post('/api/holdings', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.post('/api/holdings', checkJwt, async (req, res) => {
+  const userId = req.auth.sub;
   const { marketId, position, amount, price } = req.body;
   try {
     await addHolding(userId, marketId, position, amount, price);
@@ -2613,31 +2609,3 @@ server.listen(port, async () => {
 setInterval(updateTickerCache, CACHE_UPDATE_INTERVAL);
 
 module.exports = app; // If using for tests
-async function getMarketInfo(marketId) {
-  try {
-    const query = 'SELECT * FROM markets WHERE id = $1';
-    const values = [marketId];
-    const result = await pool.query(query, values);
-    if (result.rows.length === 0) {
-      console.log(`No market info found for market ID: ${marketId}`);
-      return null;
-    }
-    return result.rows[0];
-  } catch (error) {
-    console.error(`Error fetching market info for market ID ${marketId}:`, error);
-    return null;
-  }
-}
-
-async function getLastTradedPrice(marketId) {
-  const query = `
-    SELECT last_traded_price
-    FROM market_prices
-    WHERE market_id = $1
-    ORDER BY timestamp DESC
-    LIMIT 1
-  `;
-  const values = [marketId];
-  const result = await pool.query(query, values);
-  return result.rows[0]?.last_traded_price || null;
-}
