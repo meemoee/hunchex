@@ -23,8 +23,7 @@ const PolymarketStream = require('./polymarketStream');
 const KalshiStream = require('./kalshiStream');
 const axios = require('axios');
 const { OpenAI } = require('openai');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
+const { auth } = require('express-oauth2-jwt-bearer');
 const { v4: uuidv4 } = require('uuid');
 const fetch = require('node-fetch');
 const clients = new Map(); // Map of clientId to WebSocket
@@ -50,8 +49,6 @@ const { Decimal } = require('decimal.js');
 const app = express();
 const port = 3001;
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'your_refresh_secret';
 
 
 const {
@@ -71,6 +68,13 @@ const {
 } = require('./serverUtils');
 
 const sql = neon(process.env.DATABASE_URL);
+
+// Auth0 configuration
+const checkJwt = auth({
+  audience: process.env.AUTH0_AUDIENCE,
+  issuerBaseURL: process.env.AUTH0_ISSUER_BASE_URL,
+  tokenSigningAlg: 'RS256'
+});
 
 // OpenAI API key and client
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -693,12 +697,8 @@ app.get('/api/active-orders', async (req, res) => {
   }
 });
 
-app.get('/api/holdings', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.get('/api/holdings', checkJwt, async (req, res) => {
+  const userId = req.auth.sub; // Auth0 user ID
   try {
     const holdings = await getHoldings(userId);
     res.json(holdings);
@@ -708,12 +708,8 @@ app.get('/api/holdings', async (req, res) => {
   }
 });
 
-app.get('/api/balance', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.get('/api/balance', checkJwt, async (req, res) => {
+  const userId = req.auth.sub; // Auth0 user ID
   try {
     const balance = await getUserBalance(userId);
     res.json({ balance });
