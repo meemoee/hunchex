@@ -420,14 +420,9 @@ app.post('/api/register', async (req, res) => {
 
 // Add new endpoint for order submission
 
-app.post('/api/submit-order', async (req, res) => {
+app.post('/api/submit-order', checkJwt, async (req, res) => {
   const { marketId, outcome, side, size, price } = req.body;
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  const userId = getUserIdFromToken(req);
 
   try {
     // Get market info including token IDs
@@ -640,7 +635,7 @@ app.get('/api/active-orders', checkJwt, async (req, res) => {
 });
 
 app.get('/api/holdings', checkJwt, async (req, res) => {
-  const userId = req.auth.sub; // Auth0 user ID
+  const userId = getUserIdFromToken(req);
   try {
     const holdings = await getHoldings(userId);
     res.json(holdings);
@@ -651,7 +646,7 @@ app.get('/api/holdings', checkJwt, async (req, res) => {
 });
 
 app.get('/api/balance', checkJwt, async (req, res) => {
-  const userId = req.auth.sub; // Auth0 user ID
+  const userId = getUserIdFromToken(req);
   try {
     const balance = await getUserBalance(userId);
     res.json({ balance });
