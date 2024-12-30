@@ -385,21 +385,6 @@ const runJavaScriptScript = (scriptName, args) => {
   });
 };
 
-app.post('/api/register', async (req, res) => {
-  const { username, password } = req.body;
-  try {
-    const existingUser = await getUserByUsername(username);
-    if (existingUser) {
-      return res.status(400).json({ error: 'Username already exists' });
-    }
-    const userId = await createUser(username, password);
-    const token = generateToken(userId);
-    res.json({ token });
-  } catch (error) {
-    console.error('Error in /api/register:', error);
-    res.status(500).json({ error: 'Error registering user', details: error.message });
-  }
-});
 
 // Add new endpoint for order submission
 
@@ -1887,12 +1872,7 @@ app.get('/api/qa-tree/:treeId', checkJwt, async (req, res) => {
 });
 
 app.post('/api/save-qa-tree', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  const userId = req.auth.sub;
 
   const { marketId, treeData } = req.body;
 
@@ -1953,14 +1933,9 @@ app.post('/api/save-qa-tree', async (req, res) => {
 });
 
 // Delete a QA tree
-app.delete('/api/delete-qa-tree/:treeId', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
+app.delete('/api/delete-qa-tree/:treeId', checkJwt, async (req, res) => {
+  const userId = req.auth.sub;
   const { treeId } = req.params;
-  
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
 
   const client = await pool.connect();
   try {
@@ -1995,15 +1970,10 @@ app.delete('/api/delete-qa-tree/:treeId', async (req, res) => {
 });
 
 // Update QA tree title
-app.patch('/api/update-qa-tree-title/:treeId', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
+app.patch('/api/update-qa-tree-title/:treeId', checkJwt, async (req, res) => {
+  const userId = req.auth.sub;
   const { treeId } = req.params;
   const { title } = req.body;
-  
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
 
   try {
     const result = await pool.query(
