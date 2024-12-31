@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useAuth0 } from '@auth0/auth0-react'
+import { useUser, getAccessToken } from '@auth0/nextjs-auth0/client'
 import { type TopMover } from '@/types/mover'
 
 // Color interpolation helper
@@ -111,13 +111,13 @@ export function OrderConfirmation({
   const [stopLossEnabled, setStopLossEnabled] = useState(false)
   const [takeProfitPrice, setTakeProfitPrice] = useState(0.75) // 75%
   const [stopLossPrice, setStopLossPrice] = useState(0.25) // 25%
-  const { getAccessTokenSilently } = useAuth0()
+  const { user } = useUser()
 
   const handleSubmitOrder = async () => {
-    if (!mover || !amount || !price) return;
+    if (!mover || !amount || !price || !user) return;
 
     try {
-      const token = await getAccessTokenSilently();
+      const { accessToken } = await getAccessToken();
 
       const response = await fetch('/api/submit-order', {
         method: 'POST',
