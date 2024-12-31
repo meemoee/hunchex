@@ -1,0 +1,501 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { Bell, Menu, ChevronLeft } from 'lucide-react'
+import { type TopMover } from '@/types/mover'
+import dynamic from 'next/dynamic'
+import { useUser } from "@auth0/nextjs-auth0/client"
+
+const GradientLogo = dynamic(() => import('./GradientLogo'), { ssr: false })
+const TopMoversList = dynamic(() => import('./TopMoversList'), { ssr: false })
+const RightSidebar = dynamic(() => import('./RightSidebar'), { ssr: false })
+
+type UserProfile = {
+  holdings: {
+    id: number
+    user_id: number
+    market_id: string
+    position: string
+    amount: string
+    created_at: string
+    question?: string
+    current_price?: string
+    outcome: string
+    token_id: string
+    entry_price: string
+  }[]
+  activeOrders: {
+    id: number
+    market_id: string
+    token_id: string
+    outcome: string
+    side: string
+    size: string
+    limit_price: number
+    order_type: string
+    status: string
+    created_at: string
+    question: string
+  }[]
+}
+
+const TIME_INTERVALS = [
+  { label: '5 minutes', value: '5' },
+  { label: '10 minutes', value: '10' },
+  { label: '30 minutes', value: '30' },
+  { label: 'hour', value: '60' },
+  { label: '4 hours', value: '240' },
+  { label: '8 hours', value: '480' },
+  { label: 'day', value: '1440' },
+  { label: 'week', value: '10080' }
+] as const
+
+export default function MoversListPage() {
+  const { user, error: authError, isLoading: isAuthLoading } = useUser()
+  const [topMovers, setTopMovers] = useState<TopMover[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [orderSuccess, setOrderSuccess] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const [selectedInterval, setSelectedInterval] = useState('240')
+  const [openMarketsOnly, setOpenMarketsOnly] = useState(false)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+  const [holdings, setHoldings] = useState<UserProfile['holdings']>([])
+  const [activeOrders, setActiveOrders] = useState<UserProfile['activeOrders']>([])
+  const [balance, setBalance] = useState(0)
+  const [totalValue, setTotalValue] = useState(0)
+  const [isLoadingMovers, setIsLoadingMovers] = useState(false)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [isLoadingUserData, setIsLoadingUserData] = useState(false)
+
+  useEffect(() => {
+    if (orderSuccess && user) {
+      refreshUserData()
+      setOrderSuccess(false)
+    }
+  }, [orderSuccess, user])
+
+  const fetchBalance = async () => {
+    if (!user) return false
+    try {
+      const response = await fetch('/api/balance')
+      const data = await response.json()
+      if (response.ok) {
+        const newBalance = Number(data.balance)
+        setBalance(newBalance)
+        return true
+      }
+      return false
+    } catch (error) {
+      console.error('Balance fetch error:', error)
+      return false
+    }
+  }
+
+  const fetchActiveOrders = async () => {
+    if (!user) return false
+    try {
+      const response = await fetch('/api/active-orders')
+      if (response.ok) {
+        const data = await response.json()
+        setActiveOrders(data)
+        return true
+      }
+      return false
+    } catch (error) {
+      console.error('Active orders fetch error:', error)
+      return false
+    }
+  }
+
+  const refreshUserData = async () => {
+    if (!user) return
+    setIsLoadingUserData(true)
+    try {
+      const results = await Promise.all([
+        fetchHoldings(),
+        fetchBalance(),
+        fetchActiveOrders()
+      ])
+      
+      if (!results[0] || !results[1] || !results[2]) {
+        console.log('Initial fetch failed, retrying...')
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        await Promise.all([
+          fetchHoldings(),
+          fetchBalance(),
+          fetchActiveOrders()
+        ])
+      }
+    } catch (error) {
+      console.error('Error refreshing user data:', error)
+    } finally {
+      setIsLoadingUserData(false)
+    }
+  }
+
+  const fetchHoldings = async () => {
+    if (!user) return false
+    try {
+      console.log('Fetching holdings...')
+      
+      await fetch('/api/invalidate-holdings', {
+        method: 'POST'
+      })
+
+      const response = await fetch('/api/holdings')
+      console.log('Holdings response status:', response.status)
+      const data = await response.json()
+      console.log('Holdings data:', data)
+
+      if (response.ok && Array.isArray(data)) {
+        const formattedHoldings = data.map(holding => ({
+          ...holding,
+          amount: holding.amount.toString(),
+          entry_price: holding.entry_price.toString(),
+          current_price: holding.current_price.toString()
+        }))
+        setHoldings(formattedHoldings)
+        return true
+      }
+      return false
+    } catch (error) {
+      console.error('Holdings fetch error:', error)
+      return false
+    }
+  }
+
+  const calculateTotalValue = () => {
+    const holdingsValue = holdings.reduce((total, holding) => {
+      const amount = parseFloat(holding.amount) || 0
+      const price = parseFloat(holding.current_price || '0')
+      return total + (amount * price)
+    }, 0)
+
+    setTotalValue(balance + holdingsValue)
+  }
+
+  useEffect(() => {
+    calculateTotalValue()
+  }, [balance, holdings])
+
+  useEffect(() => {
+    if (user) {
+      refreshUserData()
+    }
+  }, [user])
+
+  useEffect(() => {
+    const ws = new WebSocket('ws://localhost:3001/ws')
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      if (data.type === 'price_update') {
+        updateMoverData(data.data)
+      }
+    }
+    return () => ws.close()
+  }, [])
+
+  const updateMoverData = (updateData: any) => {
+    setTopMovers(prevMovers => {
+      const index = prevMovers.findIndex(m => m.market_id === updateData.market_id)
+      if (index === -1) return prevMovers
+
+      const updatedMovers = [...prevMovers]
+      updatedMovers[index] = {
+        ...updatedMovers[index],
+        final_last_traded_price: updateData.last_traded_price,
+        final_best_ask: updateData.yes_price,
+        final_best_bid: updateData.no_price,
+        volume: updateData.volume
+      }
+
+      return updatedMovers
+    })
+  }
+
+  const fetchTopMovers = async (page = 1, pageSize = 10, search = '', openOnly = false) => {
+	  console.log('Full Fetch Top Movers Debug:', { 
+		page, 
+		pageSize, 
+		search, 
+		interval: selectedInterval, 
+		openOnly 
+	  });
+
+	  setError(null)
+	  if (page === 1) {
+		setIsLoadingMovers(true)
+	  } else {
+		setIsLoadingMore(true)
+	  }
+	  
+	  try {
+		const url = `/api/top_movers?interval=${selectedInterval}&page=${page}&pageSize=${pageSize}&search=${encodeURIComponent(search)}&openOnly=${openMarketsOnly}`
+		console.log('Fetch URL:', url)
+		
+		const response = await fetch(url)
+		
+		console.log('Full Response Object:', response);
+		console.log('Response Status:', response.status)
+		console.log('Response Headers:', Object.fromEntries(response.headers.entries()))
+		
+		if (!response.ok) {
+		  const errorText = await response.text()
+		  console.error('Error Response Text:', errorText)
+		  throw new Error(`Failed to fetch top movers: ${errorText}`)
+		}
+		
+		const data = await response.json()
+		console.log('Raw Received Data:', data)
+		console.log('Number of Movers Received:', data.length)
+		
+		const processedMovers = data.map((mover: TopMover) => ({
+		  ...mover,
+		  volume: mover.volume || 0,
+		  volume_change: mover.volume_change || 0,
+		  volume_change_percentage: mover.volume_change_percentage || 0,
+		}))
+
+		console.log('Processed Movers:', processedMovers)
+
+		if (page === 1) {
+		  setTopMovers(processedMovers)
+		} else {
+		  setTopMovers(prev => [...prev, ...processedMovers])
+		}
+		
+		setHasMore(processedMovers.length === pageSize)
+	  } catch (err) {
+		console.error('Complete Fetch Error:', err)
+		setError('Failed to fetch top movers. Please try again.')
+	  } finally {
+		if (page === 1) {
+		  setIsLoadingMovers(false)
+		} else {
+		  setIsLoadingMore(false)
+		}
+	  }
+	}
+
+  useEffect(() => {
+    fetchTopMovers(1, 10)
+  }, [selectedInterval, openMarketsOnly])
+
+  if (isAuthLoading) return <div className="min-h-screen bg-background flex items-center justify-center">Loading...</div>
+  if (authError) return <div className="min-h-screen bg-background flex items-center justify-center text-red-500">Error: {authError.message}</div>
+
+  return (
+    <div className="min-h-screen relative z-[1] bg-[#1a1b1e] isolation-isolate">
+      <div className="fixed inset-0 -z-10 pointer-events-none will-change-transform backface-hidden perspective-1000" 
+        style={{
+          background: `
+            radial-gradient(circle at top left,
+              rgba(147, 51, 234, 0.03) 0%,
+              rgba(113, 60, 232, 0.03) 25%,
+              rgba(79, 70, 229, 0.03) 50%,
+              rgba(197, 71, 172, 0.03) 75%,
+              rgba(236, 72, 153, 0.03) 100%
+            ),
+            radial-gradient(circle at bottom right,
+              rgba(236, 72, 153, 0.02) 0%,
+              rgba(197, 71, 172, 0.02) 25%,
+              rgba(79, 70, 229, 0.02) 50%,
+              rgba(113, 60, 232, 0.02) 75%,
+              rgba(147, 51, 234, 0.02) 100%
+            )
+          `,
+          transform: 'translateZ(0)',
+          WebkitTransform: 'translateZ(0)',
+          WebkitBackfaceVisibility: 'hidden',
+          WebkitPerspective: '1000'
+        }}
+      />
+      <header className="fixed top-0 left-0 right-0 h-14 bg-[#1a1b1e] border-b border-white/10 z-50">
+        <div className="h-full flex items-center justify-between px-4 max-w-6xl mx-auto">
+          <button className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+            <Menu size={20} />
+          </button>
+          <GradientLogo />
+          <button className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+            <Bell size={20} />
+          </button>
+        </div>
+      </header>
+
+      <div className="flex flex-col md:flex-row pt-14">
+        {/* Left Sidebar */}
+        <aside className={`fixed top-14 left-0 h-[calc(100vh-56px)] w-[400px] bg-[#1a1b1e]/70 backdrop-blur-md z-[999] border-r border-white/10 flex-col ${isSidebarCollapsed ? 'w-[50px]' : 'w-[400px]'} hidden xl:flex`}>
+          <button 
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            className="p-2 hover:bg-white/10 w-full flex justify-center mt-4"
+          >
+            <ChevronLeft className={`transform transition-transform ${isSidebarCollapsed ? 'rotate-180' : ''}`} size={20} />
+          </button>
+          
+          {!isSidebarCollapsed && (
+            <div className="p-4 overflow-y-auto flex-grow">
+              {user ? (
+                <>
+                  <div className="flex flex-col items-center mb-6">
+                    <img 
+                      src={user.picture || "/images/default-avatar.png"}
+                      alt={`${user.name}'s profile`}
+                      className="w-30 h-30 rounded-full mb-2"
+                    />
+                    <h2 className="text-xl font-bold mb-2">{user.name}</h2>
+                    <p className="text-sm text-gray-400">{user.email}</p>
+                  </div>
+                  <div className="mb-4">
+                    <h3 className="text-lg font-semibold mb-2 flex justify-between items-center">
+                      Total Value
+                      <span className="text-sm font-normal">
+                        ${totalValue.toFixed(2)}
+                      </span>
+                    </h3>
+                    <p className="mb-4">Cash: ${balance.toFixed(2)}</p>
+
+                    <h3 className="text-lg font-semibold mb-2 mt-6">Your Holdings</h3>
+                    {isLoadingUserData ? (
+                      <div className="text-center py-4">Loading holdings...</div>
+                    ) : error ? (
+                      <div className="text-red-500 py-2">{error}</div>
+                    ) : holdings.length === 0 ? (
+                      <div className="text-gray-400 py-2">No holdings found</div>
+                    ) : holdings.map((holding, index) => (
+                      <div key={index} className="mb-4 p-2 bg-gray-800 rounded">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={holding.image && holding.image !== '0' && holding.image !== 'null' && holding.image !== '' ? 
+                              holding.image : '/images/placeholder.png'}
+                            alt=""
+                            className="w-8 h-8 rounded object-cover flex-shrink-0"
+                          />
+                          <p className="font-semibold text-sm">{holding.question || 'Unknown Market'}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
+                          <p>Outcome: <span className="font-medium">{holding.outcome || 'Unknown'}</span></p>
+                          <p>Position: <span className="font-medium">{holding.amount}</span></p>
+                          <p>Entry Price: <span className="font-medium">
+                            {holding.entry_price ? `${(parseFloat(holding.entry_price) * 100).toFixed(0)}¢` : 'N/A'}
+                          </span></p>
+                          <p>Current Price: <span className="font-medium">
+                            {holding.current_price ? `${(parseFloat(holding.current_price) * 100).toFixed(0)}¢` : 'N/A'}
+                          </span></p>
+                          <p>Current Value: <span className="font-medium">
+                            {holding.current_price ? 
+                              `${(parseFloat(holding.amount) * parseFloat(holding.current_price)).toFixed(2)}` : 'N/A'}
+                          </span></p>
+                        </div>
+                      </div>
+                    ))}
+
+                    <h3 className="text-lg font-semibold mb-2 mt-6">Active Orders</h3>
+                    {isLoadingUserData ? (
+                      <div className="text-center py-4">Loading orders...</div>
+                    ) : activeOrders.length === 0 ? (
+                      <div className="text-gray-400 py-2">No active orders</div>
+                    ) : activeOrders.map((order, index) => (
+                      <div key={index} className="mb-4 p-2 bg-gray-800 rounded">
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={order.image || '/images/placeholder.png'}
+                              alt=""
+                              className="w-8 h-8 rounded object-cover flex-shrink-0"
+                            />
+                            <p className="font-semibold text-sm">{order.question}</p>
+                          </div>
+                          <button
+                            onClick={async () => {
+                              try {
+                                const response = await fetch(`/api/orders/${order.id}`, {
+                                  method: 'DELETE'
+                                });
+                                
+                                if (response.ok) {
+                                  await fetchActiveOrders();
+                                } else {
+                                  const error = await response.json();
+                                  console.error('Error cancelling order:', error);
+                                }
+                              } catch (error) {
+                                console.error('Error cancelling order:', error);
+                              }
+                            }}
+                            className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-gray-700 transition-colors"
+                            title="Cancel Order"
+                          >
+                            ×
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
+                          <p>Side: <span className="font-medium">{order.side}</span></p>
+                          <p>Outcome: <span className="font-medium">{order.outcome}</span></p>
+                          <p>Size: <span className="font-medium">{order.size}</span></p>
+                          <p>Price: <span className="font-medium">
+                            {(order.limit_price * 100).toFixed(0)}¢
+                          </span></p>
+                          <p>Created: <span className="font-medium">
+                            {new Date(order.created_at).toLocaleDateString()}
+                          </span></p>
+                        </div>
+                      </div>
+                    ))}
+
+                    <a 
+                      href="/api/auth/logout"
+                      className="block w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors mt-4 text-center"
+                    >
+                      Logout
+                    </a>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center pt-8">
+                  <p className="mb-4 text-gray-400">Please log in to continue</p>
+                  <a 
+                    href="/api/auth/login"
+                    className="block w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                  >
+                    Login
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
+        </aside>
+
+        {/* Main Content */}
+        <main className="max-w-3xl mx-auto px-4 flex-grow">
+          <TopMoversList
+            topMovers={topMovers}
+            isLoading={isLoadingMovers || isLoadingUserData}
+            isLoadingMore={isLoadingMore}
+            error={error}
+            timeIntervals={TIME_INTERVALS}
+            selectedInterval={selectedInterval}
+            onIntervalChange={interval => {
+              setSelectedInterval(interval)
+              setCurrentPage(1)
+            }}
+            onLoadMore={() => {
+              const nextPage = currentPage + 1
+              setCurrentPage(nextPage)
+              fetchTopMovers(nextPage, 10)
+            }}
+            hasMore={hasMore}
+            openMarketsOnly={openMarketsOnly}
+            onOpenMarketsChange={value => {
+              setOpenMarketsOnly(value)
+              setCurrentPage(1)
+            }}
+            balance={balance}
+          />
+        </main>
+
+        <RightSidebar />
+      </div>
+    </div>
+  )
+}
