@@ -81,10 +81,12 @@ class OrderManager {
     if (!req.auth || !req.auth.sub) {
       throw new Error('Invalid or missing authentication token');
     }
+    
     // Verify Auth0 user ID format (auth0|xxxx or similar)
     if (!req.auth.sub.match(/^[a-zA-Z0-9]+\|[a-zA-Z0-9]+$/)) {
       throw new Error('Invalid Auth0 user ID format');
     }
+    
     return req.auth.sub;
   }
 
@@ -107,6 +109,7 @@ class OrderManager {
       
       return new OrderBook(bids, asks);
     } catch (err) {
+      console.error('Orderbook snapshot error:', err);
       throw new Error(`Error getting orderbook: ${err.message}`);
     }
   }
@@ -147,16 +150,16 @@ class OrderManager {
         }
       } else {
         // Balance validation for buys
-        const balanceResult = await client.query(
-          'SELECT balance FROM user_balances WHERE user_id = $1 FOR UPDATE',
+        const userResult = await client.query(
+          'SELECT balance FROM users WHERE auth0_id = $1',
           [userId]
         );
         
-        if (!balanceResult.rows.length) {
-          throw new Error('User balance not found');
+        if (!userResult.rows.length) {
+          throw new Error('User not found');
         }
         
-        const balance = new Decimal(balanceResult.rows[0].balance);
+        const balance = new Decimal(userResult.rows[0].balance);
         
         if (orderType === OrderType.MARKET) {
           const book = await this.getOrderbookSnapshot(marketId, tokenId);
@@ -239,6 +242,7 @@ class OrderManager {
       
       await client.query('BEGIN');
       
+      // Upsert holdings 
       await client.query(`
         INSERT INTO holdings (user_id, market_id, token_id, outcome, position, amount, entry_price)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -249,15 +253,17 @@ class OrderManager {
                        / (holdings.amount + $6)
       `, [userId, marketId, tokenId, outcome, side, filledSize.toString(), avgPrice.toString()]);
       
+      // Update user balance
       await client.query(
-        'UPDATE user_balances SET balance = balance - $1 WHERE user_id = $2',
+        'UPDATE users SET balance = balance - $1 WHERE auth0_id = $2',
         [totalCost.toString(), userId]
       );
       
-      const tradeResult = await client.query(`
-        INSERT INTO trade_history 
-        (user_id, market_id, token_id, outcome, side, size, price, order_type)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      // Insert order record
+      const orderResult = await client.query(`
+        INSERT INTO orders 
+        (user_id, market_id, token_id, outcome, side, size, price, order_type, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'completed')
         RETURNING id
       `, [userId, marketId, tokenId, outcome, side, filledSize.toString(), 
           avgPrice.toString(), OrderType.MARKET]);
@@ -266,14 +272,15 @@ class OrderManager {
       
       return {
         success: true,
-        filledSize,
-        avgPrice,
-        remainingSize,
-        orderId: tradeResult.rows[0].id
+        filledSize: filledSize.toNumber(),
+        avgPrice: avgPrice.toNumber(),
+        remainingSize: remainingSize.toNumber(),
+        orderId: orderResult.rows[0].id
       };
       
     } catch (err) {
       await client.query('ROLLBACK');
+      console.error('Market order execution error:', err);
       throw err;
     } finally {
       client.release();
@@ -302,26 +309,79 @@ class OrderManager {
       await client.query('BEGIN');
       
       const orderResult = await client.query(`
-        INSERT INTO active_orders 
-        (user_id, market_id, token_id, outcome, side, size, limit_price, order_type, status)
+        INSERT INTO orders 
+        (user_id, market_id, token_id, outcome, side, size, price, order_type, status)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active')
         RETURNING id
       `, [userId, marketId, tokenId, outcome, side, size.toString(), 
           price.toString(), OrderType.LIMIT]);
       
+      // Deduct total order value from user balance
+      await client.query(
+        'UPDATE users SET balance = balance - $1 WHERE auth0_id = $2',
+        [(new Decimal(size).times(price)).toString(), userId]
+      );
+      
       await client.query('COMMIT');
       
       return {
         success: true,
-        filledSize: new Decimal(0),
-        avgPrice: new Decimal(0),
-        remainingSize: new Decimal(0),
+        filledSize: 0,
+        avgPrice: 0,
+        remainingSize: size,
         reason: 'Limit order stored',
         orderId: orderResult.rows[0].id
       };
       
     } catch (err) {
       await client.query('ROLLBACK');
+      console.error('Limit order submission error:', err);
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async cancelOrder(userId, orderId) {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Find the order details
+      const orderResult = await client.query(
+        'SELECT * FROM orders WHERE id = $1 AND user_id = $2 AND status = $3',
+        [orderId, userId, 'active']
+      );
+
+      if (orderResult.rows.length === 0) {
+        throw new Error('Order not found or already processed');
+      }
+
+      const order = orderResult.rows[0];
+
+      // Refund the balance for limit orders
+      if (order.order_type === OrderType.LIMIT) {
+        await client.query(
+          'UPDATE users SET balance = balance + $1 WHERE auth0_id = $2',
+          [(new Decimal(order.size).times(order.price)).toString(), userId]
+        );
+      }
+
+      // Mark the order as cancelled
+      await client.query(
+        'UPDATE orders SET status = $1 WHERE id = $2',
+        ['cancelled', orderId]
+      );
+
+      await client.query('COMMIT');
+
+      return {
+        success: true,
+        message: 'Order cancelled successfully'
+      };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      console.error('Order cancellation error:', err);
       throw err;
     } finally {
       client.release();
