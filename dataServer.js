@@ -1,11 +1,3 @@
-// Validate required Auth0 environment variables
-if (!process.env.AUTH0_ISSUER_URL) {
-  throw new Error('AUTH0_ISSUER_URL is required');
-}
-if (!process.env.AUTH0_AUDIENCE) {
-  throw new Error('AUTH0_AUDIENCE is required');
-}
-
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -14,14 +6,6 @@ const moment = require('moment');
 const { spawn, exec } = require('child_process');
 const { processFinalResponse } = require('./perpanalysis');
 const PolyOrderbook = require('./polyOrderbook');
-const { auth } = require('express-oauth2-jwt-bearer');
-
-// Auth0 middleware configuration
-const checkJwt = auth({
-  audience: process.env.AUTH0_AUDIENCE,
-  issuerBaseURL: process.env.AUTH0_ISSUER_URL,
-  tokenSigningAlg: 'RS256'
-});
 
 // Initialize PostgreSQL pool for complex operations
 const pool = new Pool({
@@ -39,11 +23,10 @@ const PolymarketStream = require('./polymarketStream');
 const KalshiStream = require('./kalshiStream');
 const axios = require('axios');
 const { OpenAI } = require('openai');
-
+const { auth } = require('express-oauth2-jwt-bearer');
 const { v4: uuidv4 } = require('uuid');
 const fetch = require('node-fetch');
 const clients = new Map(); // Map of clientId to WebSocket
-
 
 // Logger setup
 const logger = {
@@ -86,6 +69,12 @@ const {
 
 const sql = neon(process.env.DATABASE_URL);
 
+// Auth0 configuration
+const checkJwt = auth({
+  audience: process.env.AUTH0_AUDIENCE,
+  issuerBaseURL: process.env.AUTH0_ISSUER_BASE_URL,
+  tokenSigningAlg: 'RS256'
+});
 
 // OpenAI API key and client
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -164,14 +153,6 @@ const UNIQUE_TICKERS_UPDATE_INTERVAL = 15 * 60 * 1000;
 
 app.use(cors());
 app.use(express.json());
-
-// Auth0 error handling middleware
-app.use((err, req, res, next) => {
-  if (err.name === 'UnauthorizedError') {
-    return res.status(401).json({ error: 'Invalid token or no token provided' });
-  }
-  next(err);
-});
 
 async function invalidateHoldingsCache(userId) {
   const cacheKey = `holdings:${userId}`;
@@ -271,6 +252,20 @@ async function getHoldings(userId) {
   return result.rows;
 }
 
+function generateToken(userId) {
+  const accessToken = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '24h' });
+  const refreshToken = jwt.sign({ userId }, JWT_REFRESH_SECRET, { expiresIn: '30d' });
+  return { accessToken, refreshToken };
+}
+
+function verifyToken(token) {
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    return decoded.userId;
+  } catch (error) {
+    return null;
+  }
+}
 
 
 
@@ -409,12 +404,32 @@ const runJavaScriptScript = (scriptName, args) => {
   });
 };
 
+app.post('/api/register', async (req, res) => {
+  const { username, password } = req.body;
+  try {
+    const existingUser = await getUserByUsername(username);
+    if (existingUser) {
+      return res.status(400).json({ error: 'Username already exists' });
+    }
+    const userId = await createUser(username, password);
+    const token = generateToken(userId);
+    res.json({ token });
+  } catch (error) {
+    console.error('Error in /api/register:', error);
+    res.status(500).json({ error: 'Error registering user', details: error.message });
+  }
+});
 
 // Add new endpoint for order submission
 
-app.post('/api/submit-order', checkJwt, async (req, res) => {
+app.post('/api/submit-order', async (req, res) => {
   const { marketId, outcome, side, size, price } = req.body;
-  const userId = req.auth.sub;
+  const token = req.headers.authorization?.split(' ')[1];
+  const userId = verifyToken(token);
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
 
   try {
     // Get market info including token IDs
@@ -492,8 +507,12 @@ app.post('/api/submit-order', checkJwt, async (req, res) => {
   }
 });
 
-app.post('/api/invalidate-holdings', checkJwt, async (req, res) => {
-  const userId = req.auth.sub;
+app.post('/api/invalidate-holdings', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const userId = verifyToken(token);
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
   try {
     await invalidateHoldingsCache(userId);
     res.json({ message: 'Cache invalidated successfully' });
@@ -503,8 +522,12 @@ app.post('/api/invalidate-holdings', checkJwt, async (req, res) => {
   }
 });
 
-app.delete('/api/orders/:orderId', checkJwt, async (req, res) => {
-  const userId = req.auth.sub;
+app.delete('/api/orders/:orderId', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const userId = verifyToken(token);
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
 
   const { orderId } = req.params;
 
@@ -536,8 +559,12 @@ app.delete('/api/orders/:orderId', checkJwt, async (req, res) => {
   }
 });
 
-app.post('/api/holdings', checkJwt, async (req, res) => {
-  const userId = req.auth.sub;
+app.post('/api/holdings', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const userId = verifyToken(token);
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
   const { marketId, position, amount, price } = req.body;
   try {
     await addHolding(userId, marketId, position, amount, price);
@@ -565,8 +592,12 @@ async function updateHolding(holdingId, position, amount) {
   await pool.query(query, values);
 }
 
-app.get('/api/active-orders', checkJwt, async (req, res) => {
-  const userId = req.auth.sub;
+app.get('/api/active-orders', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const userId = verifyToken(token);
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
 
   try {
     const query = `
@@ -615,7 +646,7 @@ app.get('/api/active-orders', checkJwt, async (req, res) => {
 });
 
 app.get('/api/holdings', checkJwt, async (req, res) => {
-  const userId = req.auth.sub;
+  const userId = req.auth.sub; // Auth0 user ID
   try {
     const holdings = await getHoldings(userId);
     res.json(holdings);
@@ -626,7 +657,7 @@ app.get('/api/holdings', checkJwt, async (req, res) => {
 });
 
 app.get('/api/balance', checkJwt, async (req, res) => {
-  const userId = req.auth.sub;
+  const userId = req.auth.sub; // Auth0 user ID
   try {
     const balance = await getUserBalance(userId);
     res.json({ balance });
@@ -636,8 +667,12 @@ app.get('/api/balance', checkJwt, async (req, res) => {
   }
 });
 
-app.get('/api/value-history', checkJwt, async (req, res) => {
-  const userId = req.auth.sub;
+app.get('/api/value-history', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const userId = verifyToken(token);
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
   const { startDate, endDate } = req.query;
   try {
     const history = await getUserValueHistory(userId, startDate, endDate);
@@ -963,6 +998,30 @@ app.get('/api/news_results', async (req, res) => {
   }
 });
 
+async function loginToKalshi() {
+  const loginUrl = `${KALSHI_API_BASE_URL}/login`;
+  const loginPayload = {
+    email: KALSHI_EMAIL,
+    password: KALSHI_PASSWORD
+  };
+  
+  try {
+    const loginResponse = await axios.post(loginUrl, loginPayload, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (loginResponse.status !== 200) {
+      throw new Error(`Login failed: ${loginResponse.status} ${loginResponse.statusText}`);
+    }
+    const loginData = loginResponse.data;
+    return {
+      token: loginData.token,
+      userId: loginData.member_id
+    };
+  } catch (error) {
+    console.error('Kalshi login error:', error);
+    throw error;
+  }
+}
 
 // Initialize Polymarket orderbook client
 const polyOrderbook = new PolyOrderbook();
@@ -1634,7 +1693,7 @@ app.get('/api/unique_tickers', async (req, res) => {
 });
 
 
-app.post('/api/run-summary-script', checkJwt, async (req, res) => {
+app.post('/api/run-summary-script', async (req, res) => {
   const { marketId, clientId } = req.body;
 
   if (!marketId || !clientId) {
@@ -1757,8 +1816,13 @@ app.post('/api/run-getnewsfresh', async (req, res) => {
 // Add these endpoints to your dataServer.js
 
 // Fetch user's saved QA trees
-app.get('/api/qa-trees', checkJwt, async (req, res) => {
-  const userId = req.auth.sub;
+app.get('/api/qa-trees', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const userId = verifyToken(token);
+  
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
 
   try {
     const query = `
@@ -1781,9 +1845,14 @@ app.get('/api/qa-trees', checkJwt, async (req, res) => {
 });
 
 // Fetch specific QA tree details
-app.get('/api/qa-tree/:treeId', checkJwt, async (req, res) => {
-  const userId = req.auth.sub;
+app.get('/api/qa-tree/:treeId', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const userId = verifyToken(token);
   const { treeId } = req.params;
+  
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
 
   try {
     // Recursive CTE to fetch the entire tree structure
@@ -1863,8 +1932,13 @@ app.get('/api/qa-tree/:treeId', checkJwt, async (req, res) => {
   }
 });
 
-app.post('/api/save-qa-tree', checkJwt, async (req, res) => {
-  const userId = req.auth.sub;
+app.post('/api/save-qa-tree', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const userId = verifyToken(token);
+  
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
 
   const { marketId, treeData } = req.body;
 
@@ -1925,9 +1999,14 @@ app.post('/api/save-qa-tree', checkJwt, async (req, res) => {
 });
 
 // Delete a QA tree
-app.delete('/api/delete-qa-tree/:treeId', checkJwt, async (req, res) => {
-  const userId = req.auth.sub;
+app.delete('/api/delete-qa-tree/:treeId', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const userId = verifyToken(token);
   const { treeId } = req.params;
+  
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
 
   const client = await pool.connect();
   try {
@@ -1962,10 +2041,15 @@ app.delete('/api/delete-qa-tree/:treeId', checkJwt, async (req, res) => {
 });
 
 // Update QA tree title
-app.patch('/api/update-qa-tree-title/:treeId', checkJwt, async (req, res) => {
-  const userId = req.auth.sub;
+app.patch('/api/update-qa-tree-title/:treeId', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const userId = verifyToken(token);
   const { treeId } = req.params;
   const { title } = req.body;
+  
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
 
   try {
     const result = await pool.query(
@@ -2413,7 +2497,7 @@ app.get('/api/related-markets/:marketId', async (req, res) => {
   }
 });
 
-app.post('/api/prediction-trade-ideas', checkJwt, async (req, res) => {
+app.post('/api/prediction-trade-ideas', async (req, res) => {
   console.log('Received POST request to /api/prediction-trade-ideas');
   const { query } = req.body;
   console.log(`Received prediction trade ideas request for query: ${query}`);
@@ -2605,3 +2689,31 @@ server.listen(port, async () => {
 setInterval(updateTickerCache, CACHE_UPDATE_INTERVAL);
 
 module.exports = app; // If using for tests
+async function getMarketInfo(marketId) {
+  try {
+    const query = 'SELECT * FROM markets WHERE id = $1';
+    const values = [marketId];
+    const result = await pool.query(query, values);
+    if (result.rows.length === 0) {
+      console.log(`No market info found for market ID: ${marketId}`);
+      return null;
+    }
+    return result.rows[0];
+  } catch (error) {
+    console.error(`Error fetching market info for market ID ${marketId}:`, error);
+    return null;
+  }
+}
+
+async function getLastTradedPrice(marketId) {
+  const query = `
+    SELECT last_traded_price
+    FROM market_prices
+    WHERE market_id = $1
+    ORDER BY timestamp DESC
+    LIMIT 1
+  `;
+  const values = [marketId];
+  const result = await pool.query(query, values);
+  return result.rows[0]?.last_traded_price || null;
+}
