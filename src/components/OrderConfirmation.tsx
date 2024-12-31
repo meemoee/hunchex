@@ -125,7 +125,7 @@ export function OrderConfirmation({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${accessToken}`
         },
         body: JSON.stringify({
           marketId: mover.market_id,
