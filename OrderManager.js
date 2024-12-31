@@ -1,4 +1,5 @@
 const { Decimal } = require('decimal.js');
+const { auth } = require('express-oauth2-jwt-bearer');
 
 const OrderType = {
   MARKET: 'market',
@@ -58,6 +59,21 @@ class OrderManager {
     this.pool = pool;
     this.redis = redis;
     this.polyOrderbook = polyOrderbook;
+
+    // Auth0 configuration
+    this.checkJwt = auth({
+      audience: process.env.AUTH0_AUDIENCE,
+      issuerBaseURL: process.env.AUTH0_ISSUER_BASE_URL,
+      tokenSigningAlg: 'RS256'
+    });
+  }
+
+  getAuthMiddleware() {
+    return this.checkJwt;
+  }
+
+  extractUserId(req) {
+    return req.auth?.sub;
   }
 
   async getOrderbookSnapshot(marketId, tokenId) {
