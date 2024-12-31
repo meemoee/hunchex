@@ -11,27 +11,10 @@ const PolyOrderbook = require('./polyOrderbook');
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    rejectUnauthorized: false
+    rejectUnauthorized: false,
+    requestCert: false,
+    checkServerIdentity: null
   }
-});
-
-// Handle pool errors
-pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-  process.exit(-1);
-});
-
-// Balance table schema
-const createBalanceTableQuery = `
-  CREATE TABLE IF NOT EXISTS user_balances (
-    user_id TEXT PRIMARY KEY,
-    balance DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-  )`;
-
-pool.query(createBalanceTableQuery).catch(err => {
-  console.error('Error creating balance table:', err);
 });
 
 const WebSocket = require('ws');
@@ -673,92 +656,14 @@ app.get('/api/holdings', checkJwt, async (req, res) => {
   }
 });
 
-// Balance endpoints
 app.get('/api/balance', checkJwt, async (req, res) => {
   const userId = req.auth.sub; // Auth0 user ID
   try {
-    const result = await sql`
-      SELECT balance::numeric(10,2) as balance 
-      FROM user_balances 
-      WHERE user_id = ${userId}
-    `;
-    
-    if (result.length === 0) {
-      // Initialize balance for new user
-      await sql`
-        INSERT INTO user_balances (user_id, balance) 
-        VALUES (${userId}, 0.00)
-      `;
-      return res.json({ balance: "0.00" });
-    }
-    
-    res.json({ balance: result[0].balance.toString() });
+    const balance = await getUserBalance(userId);
+    res.json({ balance });
   } catch (error) {
-    console.error('Error fetching balance:', error);
-    res.status(500).json({ error: 'Error fetching balance' });
-  }
-});
-
-app.put('/api/balance', checkJwt, async (req, res) => {
-  const userId = req.auth.sub;
-  const { amount, operation } = req.body;
-  
-  // Input validation
-  if (typeof amount !== 'number' || isNaN(amount) || amount <= 0) {
-    return res.status(400).json({ error: 'Invalid amount' });
-  }
-  
-  if (!['increase', 'decrease'].includes(operation)) {
-    return res.status(400).json({ error: 'Invalid operation' });
-  }
-
-  try {
-    // Use a transaction with the neon sql tag
-    const result = await sql.begin(async (sql) => {
-      // Get current balance with row lock
-      const balanceResult = await sql`
-        SELECT balance::numeric(10,2) as balance 
-        FROM user_balances 
-        WHERE user_id = ${userId}
-        FOR UPDATE
-      `;
-
-      const currentBalance = new Decimal(
-        balanceResult.length > 0 ? balanceResult[0].balance : '0'
-      );
-
-      // Calculate new balance using Decimal.js
-      const decimalAmount = new Decimal(amount);
-      const newBalance = operation === 'increase' 
-        ? currentBalance.plus(decimalAmount)
-        : currentBalance.minus(decimalAmount);
-
-      // Check for insufficient funds
-      if (newBalance.isNegative()) {
-        throw new Error('Insufficient balance');
-      }
-
-      // Update balance with precise decimal handling
-      await sql`
-        INSERT INTO user_balances (user_id, balance, updated_at) 
-        VALUES (${userId}, ${newBalance.toFixed(2)}, CURRENT_TIMESTAMP)
-        ON CONFLICT (user_id) 
-        DO UPDATE SET 
-          balance = ${newBalance.toFixed(2)},
-          updated_at = CURRENT_TIMESTAMP
-      `;
-
-      return newBalance;
-    });
-
-    res.json({ balance: result.toFixed(2) });
-  } catch (error) {
-    console.error('Error updating balance:', error);
-    if (error.message === 'Insufficient balance') {
-      res.status(400).json({ error: 'Insufficient balance' });
-    } else {
-      res.status(500).json({ error: 'Error updating balance' });
-    }
+    console.error('Error in /api/balance:', error);
+    res.status(500).json({ error: 'Error fetching balance', details: error.toString() });
   }
 });
 
