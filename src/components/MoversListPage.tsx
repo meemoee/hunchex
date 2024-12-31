@@ -355,6 +355,90 @@ export default function MoversListPage() {
                     </h3>
                     <p className="mb-4">Cash: ${balance.toFixed(2)}</p>
 
+                    {/* Balance Adjustment Box */}
+                    <div className="mb-6 p-4 bg-gray-800 rounded">
+                      <h3 className="text-lg font-semibold mb-3">Adjust Balance</h3>
+                      <div className="flex gap-2 mb-3">
+                        <input
+                          type="number"
+                          id="balanceAmount"
+                          className="flex-1 bg-gray-700 rounded px-3 py-2 text-white"
+                          placeholder="Amount"
+                          min="0"
+                          step="0.01"
+                        />
+                        <button
+                          onClick={async () => {
+                            const amount = parseFloat((document.getElementById('balanceAmount') as HTMLInputElement).value);
+                            if (isNaN(amount) || amount <= 0) {
+                              alert('Please enter a valid amount');
+                              return;
+                            }
+                            try {
+                              const response = await fetch('/api/balance', {
+                                method: 'PUT',
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                  amount,
+                                  operation: 'increase'
+                                }),
+                              });
+                              if (response.ok) {
+                                const data = await response.json();
+                                setBalance(data.balance);
+                                (document.getElementById('balanceAmount') as HTMLInputElement).value = '';
+                              } else {
+                                alert('Failed to update balance');
+                              }
+                            } catch (error) {
+                              console.error('Error updating balance:', error);
+                              alert('Error updating balance');
+                            }
+                          }}
+                          className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded"
+                        >
+                          Add
+                        </button>
+                        <button
+                          onClick={async () => {
+                            const amount = parseFloat((document.getElementById('balanceAmount') as HTMLInputElement).value);
+                            if (isNaN(amount) || amount <= 0) {
+                              alert('Please enter a valid amount');
+                              return;
+                            }
+                            try {
+                              const response = await fetch('/api/balance', {
+                                method: 'PUT',
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                  amount,
+                                  operation: 'decrease'
+                                }),
+                              });
+                              if (response.ok) {
+                                const data = await response.json();
+                                setBalance(data.balance);
+                                (document.getElementById('balanceAmount') as HTMLInputElement).value = '';
+                              } else {
+                                const error = await response.text();
+                                alert(error || 'Failed to update balance');
+                              }
+                            } catch (error) {
+                              console.error('Error updating balance:', error);
+                              alert('Error updating balance');
+                            }
+                          }}
+                          className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+
                     <h3 className="text-lg font-semibold mb-2 mt-6">Your Holdings</h3>
                     {isLoadingUserData ? (
                       <div className="text-center py-4">Loading holdings...</div>
