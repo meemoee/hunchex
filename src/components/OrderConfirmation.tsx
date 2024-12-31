@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useUser, getAccessToken } from '@auth0/nextjs-auth0/client'
+import { useUser } from '@auth0/nextjs-auth0/client'
 import { type TopMover } from '@/types/mover'
 
 // Color interpolation helper
@@ -117,7 +117,9 @@ export function OrderConfirmation({
     if (!mover || !amount || !price || !user) return;
 
     try {
-      const { accessToken } = await getAccessToken();
+      const res = await fetch('/api/auth/me');
+      const session = await res.json();
+      const accessToken = session.accessToken;
 
       const response = await fetch('/api/submit-order', {
         method: 'POST',
