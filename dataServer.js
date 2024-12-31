@@ -9,12 +9,7 @@ const PolyOrderbook = require('./polyOrderbook');
 
 // Initialize PostgreSQL pool for complex operations
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false,
-    requestCert: false,
-    checkServerIdentity: null
-  }
+  connectionString: process.env.DATABASE_URL
 });
 
 // Balance table schema
