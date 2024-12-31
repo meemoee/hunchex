@@ -422,14 +422,10 @@ app.post('/api/register', async (req, res) => {
 
 // Add new endpoint for order submission
 
-app.post('/api/submit-order', async (req, res) => {
-  const { marketId, outcome, side, size, price } = req.body;
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.post('/api/submit-order', orderManager.getAuthMiddleware(), async (req, res) => {
+  try {
+    const userId = orderManager.extractUserId(req);
+    const { marketId, outcome, side, size, price } = req.body;
 
   try {
     // Get market info including token IDs
