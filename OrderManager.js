@@ -60,6 +60,11 @@ class OrderManager {
     this.redis = redis;
     this.polyOrderbook = polyOrderbook;
 
+    // Validate Auth0 configuration
+    if (!process.env.AUTH0_AUDIENCE || !process.env.AUTH0_ISSUER_BASE_URL) {
+      throw new Error('Missing required Auth0 configuration');
+    }
+
     // Auth0 configuration
     this.checkJwt = auth({
       audience: process.env.AUTH0_AUDIENCE,
@@ -73,7 +78,14 @@ class OrderManager {
   }
 
   extractUserId(req) {
-    return req.auth?.sub;
+    if (!req.auth || !req.auth.sub) {
+      throw new Error('Invalid or missing authentication token');
+    }
+    // Verify Auth0 user ID format (auth0|xxxx or similar)
+    if (!req.auth.sub.match(/^[a-zA-Z0-9]+\|[a-zA-Z0-9]+$/)) {
+      throw new Error('Invalid Auth0 user ID format');
+    }
+    return req.auth.sub;
   }
 
   async getOrderbookSnapshot(marketId, tokenId) {
