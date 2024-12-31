@@ -111,6 +111,54 @@ export function OrderConfirmation({
   const [stopLossEnabled, setStopLossEnabled] = useState(false)
   const [takeProfitPrice, setTakeProfitPrice] = useState(0.75) // 75%
   const [stopLossPrice, setStopLossPrice] = useState(0.25) // 25%
+  const { getAccessTokenSilently } = useAuth0()
+
+  const handleSubmitOrder = async () => {
+    if (!mover || !amount || !price) return;
+
+    try {
+      const token = await getAccessTokenSilently();
+
+      const response = await fetch('/api/submit-order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          marketId: mover.market_id,
+          outcome: selectedOutcome,
+          side: action,
+          size: Number(amount),
+          price: price
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        setOrderStatus({
+          type: 'error',
+          message: error.error || 'Failed to submit order'
+        });
+        return;
+      }
+
+      const result = await response.json();
+      setOrderStatus({
+        type: 'success',
+        message: 'Order submitted successfully'
+      });
+      onOrderSuccess();
+      onRefreshUserData();
+
+    } catch (error) {
+      console.error('Error submitting order:', error);
+      setOrderStatus({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to submit order'
+      });
+    }
+  }
 
   // Get effective price considering market order threshold
   const getEffectivePrice = (inputPrice: number): number => {
@@ -579,53 +627,7 @@ export function OrderConfirmation({
 
         <div className="flex gap-4 mt-6">
           <button
-            onClick={async () => {
-              if (!mover || !amount || !price) return;
-
-              try {
-                const { getAccessTokenSilently } = useAuth0();
-                const token = await getAccessTokenSilently();
-
-                const response = await fetch('/api/submit-order', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                  },
-                  body: JSON.stringify({
-                    marketId: mover.market_id,
-                    outcome: selectedOutcome,
-                    side: action,
-                    size: Number(amount),
-                    price: price
-                  })
-                });
-
-                if (!response.ok) {
-                  const error = await response.json();
-                  setOrderStatus({
-                    type: 'error',
-                    message: error.error || 'Failed to submit order'
-                  });
-                  return;
-                }
-
-                const result = await response.json();
-                setOrderStatus({
-                  type: 'success',
-                  message: 'Order submitted successfully'
-                });
-                onOrderSuccess();
-                onRefreshUserData();
-
-              } catch (error) {
-                console.error('Error submitting order:', error);
-                setOrderStatus({
-                  type: 'error',
-                  message: error instanceof Error ? error.message : 'Failed to submit order'
-                });
-              }
-            }}
+            onClick={handleSubmitOrder}
             className="flex-1 bg-green-600 text-white p-3 rounded font-bold hover:bg-green-700 transition-colors"
           >
             Confirm
