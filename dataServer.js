@@ -668,21 +668,22 @@ app.get('/api/holdings', checkJwt, async (req, res) => {
 app.get('/api/balance', checkJwt, async (req, res) => {
   const userId = req.auth.sub; // Auth0 user ID
   try {
-    const result = await pool.query(
-      'SELECT balance FROM user_balances WHERE user_id = $1',
-      [userId]
-    );
+    const result = await sql`
+      SELECT balance::numeric(10,2) as balance 
+      FROM user_balances 
+      WHERE user_id = ${userId}
+    `;
     
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       // Initialize balance for new user
-      await pool.query(
-        'INSERT INTO user_balances (user_id, balance) VALUES ($1, 0.00)',
-        [userId]
-      );
+      await sql`
+        INSERT INTO user_balances (user_id, balance) 
+        VALUES (${userId}, 0.00)
+      `;
       return res.json({ balance: "0.00" });
     }
     
-    res.json({ balance: result.rows[0].balance });
+    res.json({ balance: result[0].balance.toString() });
   } catch (error) {
     console.error('Error fetching balance:', error);
     res.status(500).json({ error: 'Error fetching balance' });
@@ -702,51 +703,53 @@ app.put('/api/balance', checkJwt, async (req, res) => {
     return res.status(400).json({ error: 'Invalid operation' });
   }
 
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
+    // Use a transaction with the neon sql tag
+    const result = await sql.begin(async (sql) => {
+      // Get current balance with row lock
+      const balanceResult = await sql`
+        SELECT balance::numeric(10,2) as balance 
+        FROM user_balances 
+        WHERE user_id = ${userId}
+        FOR UPDATE
+      `;
 
-    // Get current balance with row lock
-    const balanceResult = await client.query(
-      'SELECT balance FROM user_balances WHERE user_id = $1 FOR UPDATE',
-      [userId]
-    );
+      const currentBalance = new Decimal(
+        balanceResult.length > 0 ? balanceResult[0].balance : '0'
+      );
 
-    let currentBalance = balanceResult.rows.length > 0 
-      ? parseFloat(balanceResult.rows[0].balance) 
-      : 0;
+      // Calculate new balance using Decimal.js
+      const decimalAmount = new Decimal(amount);
+      const newBalance = operation === 'increase' 
+        ? currentBalance.plus(decimalAmount)
+        : currentBalance.minus(decimalAmount);
 
-    // Calculate new balance
-    const newBalance = operation === 'increase' 
-      ? currentBalance + amount 
-      : currentBalance - amount;
+      // Check for insufficient funds
+      if (newBalance.isNegative()) {
+        throw new Error('Insufficient balance');
+      }
 
-    // Check for insufficient funds
-    if (operation === 'decrease' && newBalance < 0) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'Insufficient balance' });
-    }
+      // Update balance with precise decimal handling
+      await sql`
+        INSERT INTO user_balances (user_id, balance, updated_at) 
+        VALUES (${userId}, ${newBalance.toFixed(2)}, CURRENT_TIMESTAMP)
+        ON CONFLICT (user_id) 
+        DO UPDATE SET 
+          balance = ${newBalance.toFixed(2)},
+          updated_at = CURRENT_TIMESTAMP
+      `;
 
-    // Round to 2 decimal places
-    const roundedBalance = Math.round(newBalance * 100) / 100;
+      return newBalance;
+    });
 
-    // Update balance
-    await client.query(
-      `INSERT INTO user_balances (user_id, balance) 
-       VALUES ($1, $2)
-       ON CONFLICT (user_id) 
-       DO UPDATE SET balance = $2, updated_at = CURRENT_TIMESTAMP`,
-      [userId, roundedBalance]
-    );
-
-    await client.query('COMMIT');
-    res.json({ balance: roundedBalance });
+    res.json({ balance: result.toFixed(2) });
   } catch (error) {
-    await client.query('ROLLBACK');
     console.error('Error updating balance:', error);
-    res.status(500).json({ error: 'Error updating balance' });
-  } finally {
-    client.release();
+    if (error.message === 'Insufficient balance') {
+      res.status(400).json({ error: 'Insufficient balance' });
+    } else {
+      res.status(500).json({ error: 'Error updating balance' });
+    }
   }
 });
 
