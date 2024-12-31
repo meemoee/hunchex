@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useAuth0 } from '@auth0/auth0-react'
 import { type TopMover } from '@/types/mover'
 
 // Color interpolation helper
@@ -578,26 +579,52 @@ export function OrderConfirmation({
 
         <div className="flex gap-4 mt-6">
           <button
-            onClick={() => {
-              console.log('OrderConfirmation: Confirm button clicked', {
-                action,
-                orderType,
-                amount,
-                price,
-                total: Number(amount) * price,
-                mover: {
-                  market_id: mover?.market_id,
-                  question: mover?.question,
-                  outcomes: mover?.outcomes
-                },
-                orderbook: {
-                  spread: orderbook?.data.spread,
-                  mid: orderbook?.data.mid,
-                  topAsk: orderbook?.data.asks[0],
-                  topBid: orderbook?.data.bids[0]
+            onClick={async () => {
+              if (!mover || !amount || !price) return;
+
+              try {
+                const { getAccessTokenSilently } = useAuth0();
+                const token = await getAccessTokenSilently();
+
+                const response = await fetch('/api/submit-order', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                  },
+                  body: JSON.stringify({
+                    marketId: mover.market_id,
+                    outcome: selectedOutcome,
+                    side: action,
+                    size: Number(amount),
+                    price: price
+                  })
+                });
+
+                if (!response.ok) {
+                  const error = await response.json();
+                  setOrderStatus({
+                    type: 'error',
+                    message: error.error || 'Failed to submit order'
+                  });
+                  return;
                 }
-              });
-              onConfirm();
+
+                const result = await response.json();
+                setOrderStatus({
+                  type: 'success',
+                  message: 'Order submitted successfully'
+                });
+                onOrderSuccess();
+                onRefreshUserData();
+
+              } catch (error) {
+                console.error('Error submitting order:', error);
+                setOrderStatus({
+                  type: 'error',
+                  message: error instanceof Error ? error.message : 'Failed to submit order'
+                });
+              }
             }}
             className="flex-1 bg-green-600 text-white p-3 rounded font-bold hover:bg-green-700 transition-colors"
           >
