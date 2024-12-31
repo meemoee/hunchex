@@ -17,6 +17,19 @@ const pool = new Pool({
   }
 });
 
+// Balance table schema
+const createBalanceTableQuery = `
+  CREATE TABLE IF NOT EXISTS user_balances (
+    user_id TEXT PRIMARY KEY,
+    balance DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+  )`;
+
+pool.query(createBalanceTableQuery).catch(err => {
+  console.error('Error creating balance table:', err);
+});
+
 const WebSocket = require('ws');
 const http = require('http');
 const PolymarketStream = require('./polymarketStream');
@@ -656,14 +669,89 @@ app.get('/api/holdings', checkJwt, async (req, res) => {
   }
 });
 
+// Balance endpoints
 app.get('/api/balance', checkJwt, async (req, res) => {
   const userId = req.auth.sub; // Auth0 user ID
   try {
-    const balance = await getUserBalance(userId);
-    res.json({ balance });
+    const result = await pool.query(
+      'SELECT balance FROM user_balances WHERE user_id = $1',
+      [userId]
+    );
+    
+    if (result.rows.length === 0) {
+      // Initialize balance for new user
+      await pool.query(
+        'INSERT INTO user_balances (user_id, balance) VALUES ($1, 0.00)',
+        [userId]
+      );
+      return res.json({ balance: "0.00" });
+    }
+    
+    res.json({ balance: result.rows[0].balance });
   } catch (error) {
-    console.error('Error in /api/balance:', error);
-    res.status(500).json({ error: 'Error fetching balance', details: error.toString() });
+    console.error('Error fetching balance:', error);
+    res.status(500).json({ error: 'Error fetching balance' });
+  }
+});
+
+app.put('/api/balance', checkJwt, async (req, res) => {
+  const userId = req.auth.sub;
+  const { amount, operation } = req.body;
+  
+  // Input validation
+  if (typeof amount !== 'number' || isNaN(amount) || amount <= 0) {
+    return res.status(400).json({ error: 'Invalid amount' });
+  }
+  
+  if (!['increase', 'decrease'].includes(operation)) {
+    return res.status(400).json({ error: 'Invalid operation' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Get current balance with row lock
+    const balanceResult = await client.query(
+      'SELECT balance FROM user_balances WHERE user_id = $1 FOR UPDATE',
+      [userId]
+    );
+
+    let currentBalance = balanceResult.rows.length > 0 
+      ? parseFloat(balanceResult.rows[0].balance) 
+      : 0;
+
+    // Calculate new balance
+    const newBalance = operation === 'increase' 
+      ? currentBalance + amount 
+      : currentBalance - amount;
+
+    // Check for insufficient funds
+    if (operation === 'decrease' && newBalance < 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Insufficient balance' });
+    }
+
+    // Round to 2 decimal places
+    const roundedBalance = Math.round(newBalance * 100) / 100;
+
+    // Update balance
+    await client.query(
+      `INSERT INTO user_balances (user_id, balance) 
+       VALUES ($1, $2)
+       ON CONFLICT (user_id) 
+       DO UPDATE SET balance = $2, updated_at = CURRENT_TIMESTAMP`,
+      [userId, roundedBalance]
+    );
+
+    await client.query('COMMIT');
+    res.json({ balance: roundedBalance });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error updating balance:', error);
+    res.status(500).json({ error: 'Error updating balance' });
+  } finally {
+    client.release();
   }
 });
 
