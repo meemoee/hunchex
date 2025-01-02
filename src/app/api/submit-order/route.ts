@@ -1,10 +1,10 @@
 import { getSession } from "@auth0/nextjs-auth0";
 import { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
-import { OrderService } from '@/services/OrderService';
 
-// Initialize OrderService
-const orderService = new OrderService();
+if (!process.env.EXPRESS_API_URL) {
+  throw new Error('EXPRESS_API_URL environment variable is not set');
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,32 +19,31 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const { marketId, outcome, side, size, price } = await request.json();
+    const orderData = await request.json();
     
     // Log for audit
     console.log('Order request:', {
       userId: session.user.sub,
-      marketId,
-      outcome,
-      side,
-      size,
-      price,
+      ...orderData,
       timestamp: new Date().toISOString()
     });
 
-    const result = await orderService.submitOrder(session.user.sub, {
-      marketId,
-      outcome,
-      side,
-      size,
-      price
+    // Forward request to Express backend
+    const response = await fetch(`${process.env.EXPRESS_API_URL}/api/submit-order`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.accessToken}`,
+        'X-User-ID': session.user.sub
+      },
+      body: JSON.stringify(orderData)
     });
 
-    return new Response(JSON.stringify({
-      success: true,
-      ...result
-    }), {
-      status: 200,
+    const data = await response.json();
+
+    // Forward Express response status and data
+    return new Response(JSON.stringify(data), {
+      status: response.status,
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
