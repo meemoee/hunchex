@@ -428,10 +428,22 @@ app.post('/api/register', async (req, res) => {
 
 // Add new endpoint for order submission
 
-app.post('/api/submit-order', orderManager.getAuthMiddleware(), async (req, res) => {
+app.post('/api/submit-order', async (req, res) => {
   try {
-    // Use Auth0 sub (unique user identifier) directly
-    const userId = orderManager.extractUserId(req);
+    // Validate Auth0 token from Next.js proxy
+    const authHeader = req.headers.authorization;
+    const userId = req.headers['x-user-id'];
+
+    if (!authHeader || !userId) {
+      return res.status(401).json({ error: 'Unauthorized - Missing authentication' });
+    }
+
+    // Extract token and validate format
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'Unauthorized - Invalid token format' });
+    }
+
     const { marketId, outcome, side, size, price } = req.body;
 
     // Get market info including token IDs

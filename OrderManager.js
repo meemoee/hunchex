@@ -241,6 +241,16 @@ class OrderManager {
       const avgPrice = totalCost.div(filledSize);
       
       await client.query('BEGIN');
+
+      // Verify user exists
+      const userResult = await client.query(
+        'SELECT id FROM users WHERE auth0_id = $1',
+        [userId]
+      );
+
+      if (userResult.rows.length === 0) {
+        throw new Error('User not found');
+      }
       
       // Upsert holdings 
       await client.query(`
