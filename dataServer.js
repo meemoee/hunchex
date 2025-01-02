@@ -4,8 +4,10 @@ const { Pool } = require('pg');
 const { neon } = require('@neondatabase/serverless');
 const moment = require('moment');
 const { spawn, exec } = require('child_process');
+const { OrderManager, OrderType, OrderSide } = require('./orderManager');
 const { processFinalResponse } = require('./perpanalysis');
 const PolyOrderbook = require('./polyOrderbook');
+
 
 // Initialize PostgreSQL pool for complex operations
 const pool = new Pool({
@@ -16,6 +18,7 @@ const pool = new Pool({
     checkServerIdentity: null
   }
 });
+
 
 const WebSocket = require('ws');
 const http = require('http');
@@ -37,7 +40,7 @@ const logger = {
 // OpenRouter constants
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const { OrderManager, OrderType, OrderSide } = require('./orderManager');
+
 const { 
     getStructuredQuery,
     getCachedMarketData,
@@ -67,6 +70,9 @@ const {
   redis
 } = require('./serverUtils');
 
+
+const polyOrderbook = new PolyOrderbook();
+const orderManager = new OrderManager(pool, redis, polyOrderbook);
 const sql = neon(process.env.DATABASE_URL);
 
 // Auth0 configuration
@@ -424,13 +430,13 @@ app.post('/api/register', async (req, res) => {
 
 app.post('/api/submit-order', orderManager.getAuthMiddleware(), async (req, res) => {
   try {
+    // Use Auth0 sub (unique user identifier) directly
     const userId = orderManager.extractUserId(req);
     const { marketId, outcome, side, size, price } = req.body;
 
-  try {
     // Get market info including token IDs
     const marketInfo = await pool.query(
-      'SELECT clobtokenids, outcomes FROM markets WHERE id = \$1',
+      'SELECT clobtokenids, outcomes FROM markets WHERE id = $1',
       [marketId]
     );
 
@@ -1020,9 +1026,7 @@ async function loginToKalshi() {
 }
 
 // Initialize Polymarket orderbook client
-const polyOrderbook = new PolyOrderbook();
 
-const orderManager = new OrderManager(pool, redis, polyOrderbook);
 
 // Get Polymarket orderbook snapshot
 app.get('/api/polymarket/orderbook/:marketId', async (req, res) => {
