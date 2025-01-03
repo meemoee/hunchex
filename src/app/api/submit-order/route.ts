@@ -1,59 +1,55 @@
-import { getSession } from "@auth0/nextjs-auth0";
-import { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
+import { getSession } from '@auth0/nextjs-auth0';
+import { NextResponse } from 'next/server';
 
-if (!process.env.EXPRESS_API_URL) {
-  throw new Error('EXPRESS_API_URL environment variable is not set');
-}
-
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
-    // Get Auth0 session
-    const cookieStore = cookies();
-    const session = await getSession({ cookies: () => cookieStore });
+    // Properly await the cookieStore
+    const cookieStore = await cookies();
     
-    if (!session?.user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { 
-        status: 401,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    const orderData = await request.json();
-    
-    // Log for audit
-    console.log('Order request:', {
-      userId: session.user.sub,
-      ...orderData,
-      timestamp: new Date().toISOString()
+    // Get session with properly typed cookie handler
+    const session = await getSession({
+      req: {
+        cookies: cookieStore
+      } as any
     });
 
-    // Forward request to Express backend
+    if (!session?.user) {
+      return new NextResponse(
+        JSON.stringify({ error: 'Unauthorized' }), 
+        { status: 401 }
+      );
+    }
+
+    // Extract order data from request
+    const orderData = await request.json();
+    
+    // Forward request to Express backend with proper headers
     const response = await fetch(`${process.env.EXPRESS_API_URL}/api/submit-order`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${session.accessToken}`,
-        'X-User-ID': session.user.sub
+        'x-user-id': session.user.sub
       },
-      body: JSON.stringify(orderData)
+      body: JSON.stringify(orderData),
     });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return new NextResponse(
+        JSON.stringify(errorData),
+        { status: response.status }
+      );
+    }
 
     const data = await response.json();
-
-    // Forward Express response status and data
-    return new Response(JSON.stringify(data), {
-      status: response.status,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return NextResponse.json(data);
   } catch (error) {
-    console.error('Order submission error:', error);
-    return new Response(JSON.stringify({
-      error: 'Order submission failed',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    console.error('Route handler error:', error);
+    return new NextResponse(
+      JSON.stringify({ error: 'Internal server error' }),
+      { status: 500 }
+    );
   }
 }

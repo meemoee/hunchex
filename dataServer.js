@@ -9,16 +9,16 @@ const { processFinalResponse } = require('./perpanalysis');
 const PolyOrderbook = require('./polyOrderbook');
 
 
-// Initialize PostgreSQL pool for complex operations
+// Update the PostgreSQL pool configuration
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false,
-    requestCert: false,
-    checkServerIdentity: null
+  ssl: process.env.NODE_ENV === 'production' ? {
+    rejectUnauthorized: true,
+    ca: process.env.SSL_CA_CERT
+  } : {
+    rejectUnauthorized: false
   }
 });
-
 
 const WebSocket = require('ws');
 const http = require('http');
@@ -157,8 +157,24 @@ async function authenticateKalshiElections() {
 const CACHE_UPDATE_INTERVAL = 5 * 60 * 1000;
 const UNIQUE_TICKERS_UPDATE_INTERVAL = 15 * 60 * 1000;
 
-app.use(cors());
+// Update the Express app configuration
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? process.env.FRONTEND_URL 
+    : 'http://localhost:3000',
+  credentials: true
+}));
 app.use(express.json());
+// Add secure headers middleware
+app.use((req, res, next) => {
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  next();
+});
 
 async function invalidateHoldingsCache(userId) {
   const cacheKey = `holdings:${userId}`;
@@ -429,34 +445,46 @@ app.post('/api/register', async (req, res) => {
 // Add new endpoint for order submission
 
 app.post('/api/submit-order', async (req, res) => {
+  console.log('\n=== Express Server: /api/submit-order START ===');
+  console.log('Headers received:', req.headers);
+  console.log('Body received:', req.body);
+  
   try {
     // Validate Auth0 token from Next.js proxy
     const authHeader = req.headers.authorization;
     const userId = req.headers['x-user-id'];
+    console.log('Auth check:', { authHeader: !!authHeader, userId: !!userId });
 
     if (!authHeader || !userId) {
+      console.log('Auth failed: Missing auth or userId');
       return res.status(401).json({ error: 'Unauthorized - Missing authentication' });
     }
 
     // Extract token and validate format
     const token = authHeader.split(' ')[1];
     if (!token) {
+      console.log('Auth failed: Invalid token format');
       return res.status(401).json({ error: 'Unauthorized - Invalid token format' });
     }
 
     const { marketId, outcome, side, size, price } = req.body;
+    console.log('Order details:', { marketId, outcome, side, size, price });
 
     // Get market info including token IDs
+    console.log('Querying market info...');
     const marketInfo = await pool.query(
       'SELECT clobtokenids, outcomes FROM markets WHERE id = $1',
       [marketId]
     );
+    console.log('Market info query result:', marketInfo.rows[0]);
 
     if (!marketInfo.rows.length) {
+      console.log('Market not found');
       return res.status(404).json({ error: 'Market not found' });
     }
 
     // Parse outcomes and token IDs
+    console.log('Parsing outcomes and tokens...');
     const outcomes = Array.isArray(marketInfo.rows[0].outcomes) ? 
       marketInfo.rows[0].outcomes : 
       JSON.parse(marketInfo.rows[0].outcomes.replace(/'/g, '"'));
@@ -465,29 +493,37 @@ app.post('/api/submit-order', async (req, res) => {
       marketInfo.rows[0].clobtokenids :
       JSON.parse(marketInfo.rows[0].clobtokenids);
 
+    console.log('Parsed:', { outcomes, tokenIds });
+
     // Get the corresponding token ID based on outcome
     const outcomeIndex = outcomes.findIndex(
       o => o.toLowerCase() === outcome.toLowerCase()
     );
 
     if (outcomeIndex === -1) {
+      console.log('Invalid outcome:', outcome);
       return res.status(400).json({ error: 'Invalid outcome' });
     }
 
     const selectedTokenId = tokenIds[outcomeIndex];
+    console.log('Selected token ID:', selectedTokenId);
 
     // Convert inputs to Decimal
     const decimalSize = new Decimal(size);
     const decimalPrice = new Decimal(price);
+    console.log('Converted to Decimal:', { decimalSize, decimalPrice });
 
     // Get current orderbook
+    console.log('Getting orderbook snapshot...');
     const orderbook = await orderManager.getOrderbookSnapshot(marketId, selectedTokenId);
+    console.log('Orderbook received:', orderbook);
 
     let orderResult;
     
     // Determine if this should be a market or limit order based on price
     if ((side === 'buy' && orderbook.asks.length && decimalPrice.gte(orderbook.asks[0].price)) ||
         (side === 'sell' && orderbook.bids.length && decimalPrice.lte(orderbook.bids[0].price))) {
+      console.log('Executing as market order');
       // Execute as market order if price would cross the spread
       orderResult = await orderManager.executeMarketOrder(
         userId,
@@ -498,6 +534,7 @@ app.post('/api/submit-order', async (req, res) => {
         decimalSize
       );
     } else {
+      console.log('Submitting as limit order');
       // Submit as limit order
       orderResult = await orderManager.submitLimitOrder(
         userId,
@@ -510,15 +547,21 @@ app.post('/api/submit-order', async (req, res) => {
       );
     }
 
+    console.log('Order result:', orderResult);
     res.json({
       success: true,
       order: orderResult
     });
 
   } catch (error) {
-    console.error('Error submitting order:', error);
+    console.error('Express Server Error:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    });
     res.status(400).json({ error: error.message });
   }
+  console.log('=== Express Server: /api/submit-order END ===\n');
 });
 
 app.post('/api/invalidate-holdings', async (req, res) => {
