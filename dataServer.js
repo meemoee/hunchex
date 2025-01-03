@@ -448,6 +448,12 @@ app.post('/api/submit-order', async (req, res) => {
   console.log('\n=== Express Server: /api/submit-order START ===');
   console.log('Headers received:', req.headers);
   console.log('Body received:', req.body);
+  console.log('SSL config:', {
+    NODE_ENV: process.env.NODE_ENV,
+    SSL_ENABLED: !!process.env.SSL_CA_CERT
+  });
+  
+  const startTime = Date.now();
   
   try {
     // Validate Auth0 token from Next.js proxy
@@ -553,13 +559,22 @@ app.post('/api/submit-order', async (req, res) => {
       order: orderResult
     });
 
+    console.log(`Order processing completed in ${Date.now() - startTime}ms`);
   } catch (error) {
     console.error('Express Server Error:', {
       name: error.name,
       message: error.message,
-      stack: error.stack
+      stack: error.stack,
+      code: error.code,
+      errno: error.errno,
+      syscall: error.syscall,
+      hostname: error.hostname,
+      time: `${Date.now() - startTime}ms`
     });
-    res.status(400).json({ error: error.message });
+    res.status(400).json({ 
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
   console.log('=== Express Server: /api/submit-order END ===\n');
 });
