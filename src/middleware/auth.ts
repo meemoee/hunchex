@@ -10,6 +10,17 @@ export const validateAuth0Token = auth({
   requestSigningAlgorithm: 'RS256',
   checkJwt: {
     rejectUnauthorized: false
+  },
+  // Add error handler for token validation
+  errorHandler: (err, req, res) => {
+    console.error('Token validation error:', {
+      name: err.name,
+      message: err.message,
+      stack: err.stack,
+      code: err.code,
+      statusCode: err.statusCode
+    });
+    throw err;
   }
 });
 

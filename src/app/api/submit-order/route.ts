@@ -3,18 +3,33 @@ import { getSession } from '@auth0/nextjs-auth0';
 import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
+  console.log('\n=== Next.js Order Submission START ===');
+  console.log('Request headers:', Object.fromEntries(request.headers));
+  console.log('Request method:', request.method);
+  
   try {
-    // Properly await the cookieStore
+    console.log('Getting cookie store...');
     const cookieStore = await cookies();
+    console.log('Cookie store retrieved:', cookieStore.getAll().map(c => ({ 
+      name: c.name,
+      path: c.path,
+      secure: c.secure
+    })));
     
-    // Get session with properly typed cookie handler
+    console.log('Getting Auth0 session...');
     const session = await getSession({
       req: {
         cookies: cookieStore
       } as any
     });
+    console.log('Session result:', {
+      exists: !!session,
+      hasUser: !!session?.user,
+      userId: session?.user?.sub
+    });
 
     if (!session?.user) {
+      console.log('No authenticated user found');
       return new NextResponse(
         JSON.stringify({ error: 'Unauthorized' }), 
         { status: 401 }
@@ -44,12 +59,20 @@ export async function POST(request: Request) {
     }
 
     const data = await response.json();
+    console.log('Order submission successful');
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Route handler error:', error);
+    console.error('Order submission error:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      cause: error.cause
+    });
     return new NextResponse(
-      JSON.stringify({ error: 'Internal server error' }),
+      JSON.stringify({ error: 'Internal server error', details: error.message }),
       { status: 500 }
     );
+  } finally {
+    console.log('=== Next.js Order Submission END ===\n');
   }
 }
