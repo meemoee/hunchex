@@ -136,8 +136,7 @@ async function fetchFromDatabase(sql) {
                         (m.end_date > NOW() OR m.end_date IS NULL)
                 END
             )
-            ORDER BY m.updated_at DESC
-        `);
+            ORDER BY m.updated_at DESC`;
 
         console.log(`Fetched ${result.rows.length} records in ${(Date.now() - startTime) / 1000} seconds`);
         return processJsonFields(result.rows);
