@@ -1434,7 +1434,7 @@ app.post('/api/chat', async (req, res) => {
 
     // Load market data
     console.log('Fetching market data from cache/database...');
-    const marketData = await getCachedMarketData();
+    const marketData = await getCachedMarketData(sql);
     console.log(`Loaded ${marketData.length} market records`);
     
     // Get structured queries
