@@ -19,6 +19,9 @@ const redisClient = Redis.createClient({
 });
 
 async function getCachedMarketData(sql) {
+    if (!sql) {
+        throw new Error('sql parameter is required');
+    }
     const cacheKey = "market_data_cache";
     try {
         await redisClient.connect();
@@ -69,6 +72,9 @@ function processJsonFields(df) {
 }
 
 async function fetchFromDatabase(sql) {
+    if (!sql) {
+        throw new Error('sql parameter is required for database operations');
+    }
     console.log("Fetching from database...");
     const startTime = Date.now();
 
