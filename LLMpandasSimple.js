@@ -144,8 +144,8 @@ async function fetchFromDatabase(sql) {
             )
             ORDER BY m.updated_at DESC`;
 
-        console.log(`Fetched ${result.rows.length} records in ${(Date.now() - startTime) / 1000} seconds`);
-        return processJsonFields(result.rows);
+        console.log(`Fetched ${result.length} records in ${(Date.now() - startTime) / 1000} seconds`);
+        return processJsonFields(result);
     } finally {
         // No need to end connection with Neon
     }
