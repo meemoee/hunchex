@@ -1,22 +1,11 @@
 const express = require('express');
 const cors = require('cors');
-const { Pool } = require('pg');
 const { neon } = require('@neondatabase/serverless');
 const moment = require('moment');
 const { spawn, exec } = require('child_process');
 const { OrderManager, OrderType, OrderSide } = require('./orderManager');
 const { processFinalResponse } = require('./perpanalysis');
 const PolyOrderbook = require('./polyOrderbook');
-
-
-// Update the PostgreSQL pool configuration
-// Minimal, explicit configuration
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: true // For development
-  }
-});
 
 const WebSocket = require('ws');
 const http = require('http');
@@ -68,15 +57,6 @@ const {
   redis
 } = require('./serverUtils');
 
-// Test the connection
-pool.connect((err, client, release) => {
-  if (err) {
-    console.error('Error connecting to database:', err);
-    return;
-  }
-  console.log('Successfully connected to database');
-  release();
-});
 
 
 const polyOrderbook = new PolyOrderbook();
