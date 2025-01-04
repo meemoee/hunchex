@@ -8,13 +8,6 @@ require('dotenv').config();
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
-const DB_PARAMS = {
-    dbname: "market_data",
-    user: "market_data_user",
-    password: "1pCU8cOG1npoN0d0",
-    host: "market-data-db.cpk8ckae4ddx.us-east-1.rds.amazonaws.com",
-    port: 5432
-};
 
 // Redis connection
 const redisClient = Redis.createClient({
@@ -25,7 +18,7 @@ const redisClient = Redis.createClient({
     }
 });
 
-async function getCachedMarketData() {
+async function getCachedMarketData(sql) {
     const cacheKey = "market_data_cache";
     try {
         await redisClient.connect();
@@ -37,7 +30,7 @@ async function getCachedMarketData() {
         }
 
         console.log("Cache miss - loading from database...");
-        const df = await fetchFromDatabase();
+        const df = await fetchFromDatabase(sql);
         
         console.log("Caching data in Redis...");
         await redisClient.setEx(
@@ -75,15 +68,12 @@ function processJsonFields(df) {
     return df;
 }
 
-async function fetchFromDatabase() {
+async function fetchFromDatabase(sql) {
     console.log("Fetching from database...");
     const startTime = Date.now();
-    
-    const client = new Client(DB_PARAMS);
-    await client.connect();
 
     try {
-        const result = await client.query(`
+        const result = await sql`
             WITH latest_prices AS (
                 SELECT DISTINCT ON (market_id)
                     market_id,
@@ -152,7 +142,7 @@ async function fetchFromDatabase() {
         console.log(`Fetched ${result.rows.length} records in ${(Date.now() - startTime) / 1000} seconds`);
         return processJsonFields(result.rows);
     } finally {
-        await client.end();
+        // No need to end connection with Neon
     }
 }
 
@@ -443,7 +433,7 @@ async function processMarketQuery(data, query) {
 // Export functions for use in other modules
 module.exports = {
     getStructuredQuery,
-    getCachedMarketData,
+    getCachedMarketData: (sql) => getCachedMarketData(sql),
     processMarketQuery,
     synthesizeResults
 };
