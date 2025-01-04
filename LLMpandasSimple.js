@@ -41,7 +41,7 @@ async function getCachedMarketData(sql) {
         return df;
     } catch (error) {
         console.error(`Cache error: ${error}`);
-        return fetchFromDatabase();
+        return fetchFromDatabase(sql);
     } finally {
         await redisClient.disconnect();
     }
