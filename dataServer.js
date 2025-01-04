@@ -10,13 +10,11 @@ const PolyOrderbook = require('./polyOrderbook');
 
 
 // Update the PostgreSQL pool configuration
+// Minimal, explicit configuration
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? {
-    rejectUnauthorized: true,
-    ca: process.env.SSL_CA_CERT
-  } : {
-    rejectUnauthorized: false
+  ssl: {
+    rejectUnauthorized: true // For development
   }
 });
 
@@ -70,10 +68,20 @@ const {
   redis
 } = require('./serverUtils');
 
+// Test the connection
+pool.connect((err, client, release) => {
+  if (err) {
+    console.error('Error connecting to database:', err);
+    return;
+  }
+  console.log('Successfully connected to database');
+  release();
+});
+
 
 const polyOrderbook = new PolyOrderbook();
-const orderManager = new OrderManager(pool, redis, polyOrderbook);
 const sql = neon(process.env.DATABASE_URL);
+const orderManager = new OrderManager(sql, redis, polyOrderbook);
 
 // Auth0 configuration
 const checkJwt = auth({
@@ -445,138 +453,74 @@ app.post('/api/register', async (req, res) => {
 // Add new endpoint for order submission
 
 app.post('/api/submit-order', async (req, res) => {
-  console.log('\n=== Express Server: /api/submit-order START ===');
-  console.log('Headers received:', req.headers);
-  console.log('Body received:', req.body);
-  console.log('SSL config:', {
-    NODE_ENV: process.env.NODE_ENV,
-    SSL_ENABLED: !!process.env.SSL_CA_CERT
-  });
-  
-  const startTime = Date.now();
+  console.log('\n=== EXPRESS BACKEND START ===');
   
   try {
-    // Validate Auth0 token from Next.js proxy
+    console.log('1. Express received request');
+    console.log('Headers:', req.headers);
+    console.log('Body:', req.body);
+
     const authHeader = req.headers.authorization;
     const userId = req.headers['x-user-id'];
-    console.log('Auth check:', { authHeader: !!authHeader, userId: !!userId });
+
+    console.log('2. Auth check:', {
+      hasAuthHeader: !!authHeader,
+      hasUserId: !!userId
+    });
 
     if (!authHeader || !userId) {
-      console.log('Auth failed: Missing auth or userId');
-      return res.status(401).json({ error: 'Unauthorized - Missing authentication' });
+      console.error('3. Missing authentication');
+      return res.status(401).json({ error: 'Authentication required' });
     }
 
-    // Extract token and validate format
-    const token = authHeader.split(' ')[1];
-    if (!token) {
-      console.log('Auth failed: Invalid token format');
-      return res.status(401).json({ error: 'Unauthorized - Invalid token format' });
-    }
-
-    const { marketId, outcome, side, size, price } = req.body;
-    console.log('Order details:', { marketId, outcome, side, size, price });
-
-    // Get market info including token IDs
-    console.log('Querying market info...');
+    console.log('4. Getting market info...');
     const marketInfo = await pool.query(
-      'SELECT clobtokenids, outcomes FROM markets WHERE id = $1',
-      [marketId]
+      'SELECT clobtokenids FROM markets WHERE id = $1',
+      [req.body.marketId]
     );
-    console.log('Market info query result:', marketInfo.rows[0]);
+    console.log('5. Market info result:', marketInfo.rows[0]);
 
-    if (!marketInfo.rows.length) {
-      console.log('Market not found');
-      return res.status(404).json({ error: 'Market not found' });
-    }
+    const tokenId = JSON.parse(marketInfo.rows[0].clobtokenids)[0];
+    console.log('6. TokenId:', tokenId);
 
-    // Parse outcomes and token IDs
-    console.log('Parsing outcomes and tokens...');
-    const outcomes = Array.isArray(marketInfo.rows[0].outcomes) ? 
-      marketInfo.rows[0].outcomes : 
-      JSON.parse(marketInfo.rows[0].outcomes.replace(/'/g, '"'));
-
-    const tokenIds = Array.isArray(marketInfo.rows[0].clobtokenids) ?
-      marketInfo.rows[0].clobtokenids :
-      JSON.parse(marketInfo.rows[0].clobtokenids);
-
-    console.log('Parsed:', { outcomes, tokenIds });
-
-    // Get the corresponding token ID based on outcome
-    const outcomeIndex = outcomes.findIndex(
-      o => o.toLowerCase() === outcome.toLowerCase()
-    );
-
-    if (outcomeIndex === -1) {
-      console.log('Invalid outcome:', outcome);
-      return res.status(400).json({ error: 'Invalid outcome' });
-    }
-
-    const selectedTokenId = tokenIds[outcomeIndex];
-    console.log('Selected token ID:', selectedTokenId);
-
-    // Convert inputs to Decimal
-    const decimalSize = new Decimal(size);
-    const decimalPrice = new Decimal(price);
-    console.log('Converted to Decimal:', { decimalSize, decimalPrice });
-
-    // Get current orderbook
-    console.log('Getting orderbook snapshot...');
-    const orderbook = await orderManager.getOrderbookSnapshot(marketId, selectedTokenId);
-    console.log('Orderbook received:', orderbook);
-
-    let orderResult;
-    
-    // Determine if this should be a market or limit order based on price
-    if ((side === 'buy' && orderbook.asks.length && decimalPrice.gte(orderbook.asks[0].price)) ||
-        (side === 'sell' && orderbook.bids.length && decimalPrice.lte(orderbook.bids[0].price))) {
-      console.log('Executing as market order');
-      // Execute as market order if price would cross the spread
-      orderResult = await orderManager.executeMarketOrder(
-        userId,
-        marketId,
-        selectedTokenId,
-        outcome,
-        side === 'buy' ? OrderSide.BUY : OrderSide.SELL,
-        decimalSize
+    console.log('7. Attempting order via OrderManager...');
+    let result;
+    if (req.body.price) {
+      console.log('8a. Submitting limit order...');
+      result = await orderManager.submitLimitOrder(
+        userId, 
+        req.body.marketId, 
+        tokenId,
+        req.body.outcome,
+        req.body.side,
+        req.body.size,
+        req.body.price
       );
     } else {
-      console.log('Submitting as limit order');
-      // Submit as limit order
-      orderResult = await orderManager.submitLimitOrder(
+      console.log('8b. Executing market order...');
+      result = await orderManager.executeMarketOrder(
         userId,
-        marketId,
-        selectedTokenId,
-        outcome,
-        side === 'buy' ? OrderSide.BUY : OrderSide.SELL,
-        decimalSize,
-        decimalPrice
+        req.body.marketId,
+        tokenId,
+        req.body.outcome,
+        req.body.side,
+        req.body.size
       );
     }
 
-    console.log('Order result:', orderResult);
-    res.json({
-      success: true,
-      order: orderResult
-    });
+    console.log('9. Order result:', result);
+    res.json(result);
 
-    console.log(`Order processing completed in ${Date.now() - startTime}ms`);
   } catch (error) {
-    console.error('Express Server Error:', {
+    console.error('ERROR in Express:', {
       name: error.name,
       message: error.message,
-      stack: error.stack,
-      code: error.code,
-      errno: error.errno,
-      syscall: error.syscall,
-      hostname: error.hostname,
-      time: `${Date.now() - startTime}ms`
+      stack: error.stack
     });
-    res.status(400).json({ 
-      error: error.message,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
+    res.status(500).json({ error: error.message });
+  } finally {
+    console.log('=== EXPRESS BACKEND END ===\n');
   }
-  console.log('=== Express Server: /api/submit-order END ===\n');
 });
 
 app.post('/api/invalidate-holdings', async (req, res) => {
