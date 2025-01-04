@@ -2685,14 +2685,14 @@ setInterval(updateTickerCache, CACHE_UPDATE_INTERVAL);
 module.exports = app; // If using for tests
 async function getMarketInfo(marketId) {
   try {
-    const query = 'SELECT * FROM markets WHERE id = $1';
-    const values = [marketId];
-    const result = await pool.query(query, values);
-    if (result.rows.length === 0) {
+    const result = await sql`
+      SELECT * FROM markets WHERE id = ${marketId}
+    `;
+    if (result.length === 0) {
       console.log(`No market info found for market ID: ${marketId}`);
       return null;
     }
-    return result.rows[0];
+    return result[0];
   } catch (error) {
     console.error(`Error fetching market info for market ID ${marketId}:`, error);
     return null;
@@ -2700,14 +2700,12 @@ async function getMarketInfo(marketId) {
 }
 
 async function getLastTradedPrice(marketId) {
-  const query = `
+  const result = await sql`
     SELECT last_traded_price
     FROM market_prices
-    WHERE market_id = $1
+    WHERE market_id = ${marketId}
     ORDER BY timestamp DESC
     LIMIT 1
   `;
-  const values = [marketId];
-  const result = await pool.query(query, values);
-  return result.rows[0]?.last_traded_price || null;
+  return result[0]?.last_traded_price || null;
 }
