@@ -454,13 +454,12 @@ app.post('/api/submit-order', async (req, res) => {
     }
 
     console.log('4. Getting market info...');
-    const marketInfo = await pool.query(
-      'SELECT clobtokenids FROM markets WHERE id = $1',
-      [req.body.marketId]
-    );
-    console.log('5. Market info result:', marketInfo.rows[0]);
+    const marketInfo = await sql`
+      SELECT clobtokenids FROM markets WHERE id = ${req.body.marketId}
+    `;
+    console.log('5. Market info result:', marketInfo[0]);
 
-    const tokenId = JSON.parse(marketInfo.rows[0].clobtokenids)[0];
+    const tokenId = JSON.parse(marketInfo[0].clobtokenids)[0];
     console.log('6. TokenId:', tokenId);
 
     console.log('7. Attempting order via OrderManager...');
