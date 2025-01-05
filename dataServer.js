@@ -17,6 +17,33 @@ const { auth } = require('express-oauth2-jwt-bearer');
 const { v4: uuidv4 } = require('uuid');
 const fetch = require('node-fetch');
 const clients = new Map(); // Map of clientId to WebSocket
+const userSockets = new Map(); // Map of userId to Set of WebSocket connections
+
+function addUserSocket(userId, ws) {
+  if (!userSockets.has(userId)) {
+    userSockets.set(userId, new Set());
+  }
+  userSockets.get(userId).add(ws);
+}
+
+function removeUserSocket(userId, ws) {
+  if (userSockets.has(userId)) {
+    userSockets.get(userId).delete(ws);
+    if (userSockets.get(userId).size === 0) {
+      userSockets.delete(userId);
+    }
+  }
+}
+
+function broadcastToUser(userId, data) {
+  if (userSockets.has(userId)) {
+    userSockets.get(userId).forEach(ws => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(data));
+      }
+    });
+  }
+}
 
 // Logger setup
 const logger = {
@@ -189,6 +216,13 @@ async function addHolding(userId, marketId, position, amount, price) {
     // Deduct the cost from the user's balance
     const newBalance = currentBalance - cost;
     await client.query('UPDATE user_balances SET balance = $1 WHERE user_id = $2', [newBalance, userId]);
+    
+    // Notify connected clients about balance update
+    broadcastToUser(userId, {
+      type: 'balance_update',
+      balance: newBalance,
+      timestamp: new Date().toISOString()
+    });
 
     // Add the holding
     await client.query('INSERT INTO holdings (user_id, market_id, position, amount) VALUES ($1, $2, $3, $4)', [userId, marketId, position, amount]);
@@ -570,6 +604,12 @@ app.delete('/api/orders/:orderId', async (req, res) => {
       'UPDATE active_orders SET status = $1 WHERE id = $2',
       ['cancelled', orderId]
     );
+
+    // Notify connected clients about order update
+    broadcastToUser(userId, {
+      type: 'active_orders_update',
+      timestamp: new Date().toISOString()
+    });
 
     res.json({ message: 'Order cancelled successfully' });
   } catch (error) {
@@ -2615,6 +2655,9 @@ wss.on('connection', (ws) => {
   // Track active streams for this connection
   const activeStreams = new Map();
   
+  // Store userId if provided in connection
+  let userId = null;
+  
   // Send the clientId to the client
   ws.send(JSON.stringify({ 
     type: 'client_id', 
@@ -2632,7 +2675,11 @@ wss.on('connection', (ws) => {
       console.log('Parsed Message:', JSON.stringify(data, null, 2));
       console.log('Message Type:', data.type);
       
-      if (data.type === 'subscribe_orderbook') {
+      if (data.type === 'auth') {
+        userId = data.userId;
+        addUserSocket(userId, ws);
+        console.log(`User ${userId} authenticated on WebSocket ${clientId}`);
+      } else if (data.type === 'subscribe_orderbook') {
         console.log('=== ORDERBOOK SUBSCRIPTION REQUEST ===');
         const { marketId, side } = data;
         
@@ -2760,8 +2807,13 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     console.log('WebSocket Connection Closed', {
       clientId,
+      userId,
       timestamp: new Date().toISOString()
     });
+    
+    if (userId) {
+      removeUserSocket(userId, ws);
+    }
     
     // Clean up all streams for this connection
     activeStreams.forEach(stream => {
