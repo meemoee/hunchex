@@ -12,17 +12,18 @@ const RightSidebar = dynamic(() => import('./RightSidebar'), { ssr: false })
 
 type UserProfile = {
   holdings: {
-    id: number
-    user_id: number
+    id: string
+    user_id: string
     market_id: string
+    token_id: string
     position: string
+    outcome?: string  // Make optional
     amount: string
+    entry_price?: string  // Make optional
+    current_price?: string
     created_at: string
     question?: string
-    current_price?: string
-    outcome: string
-    token_id: string
-    entry_price: string
+    image?: string
   }[]
   activeOrders: {
     id: number
@@ -135,35 +136,58 @@ export default function MoversListPage() {
   }
 
   const fetchHoldings = async () => {
-    if (!user) return false
-    try {
-      console.log('Fetching holdings...')
-      
-      await fetch('/api/invalidate-holdings', {
-        method: 'POST'
-      })
+	  if (!user) return false;
+	  try {
+		console.log('\n=== FETCHING HOLDINGS ===');
+		
+		// First invalidate the cache
+		console.log('Invalidating holdings cache...');
+		const invalidateResponse = await fetch('/api/invalidate-holdings', {
+		  method: 'POST'
+		});
+		
+		if (!invalidateResponse.ok) {
+		  console.warn('Cache invalidation failed:', await invalidateResponse.text());
+		}
+		
+		// Then fetch fresh holdings
+		console.log('Fetching fresh holdings...');
+		const response = await fetch('/api/holdings');
+		
+		if (!response.ok) {
+		  throw new Error(`Holdings fetch failed: ${response.status}`);
+		}
 
-      const response = await fetch('/api/holdings')
-      console.log('Holdings response status:', response.status)
-      const data = await response.json()
-      console.log('Holdings data:', data)
+		const rawText = await response.text();
+		console.log('Raw response:', rawText);
 
-      if (response.ok && Array.isArray(data)) {
-        const formattedHoldings = data.map(holding => ({
-          ...holding,
-          amount: holding.amount.toString(),
-          entry_price: holding.entry_price.toString(),
-          current_price: holding.current_price.toString()
-        }))
-        setHoldings(formattedHoldings)
-        return true
-      }
-      return false
-    } catch (error) {
-      console.error('Holdings fetch error:', error)
-      return false
-    }
-  }
+		let data;
+		try {
+		  data = JSON.parse(rawText);
+		} catch (parseError) {
+		  console.error('JSON parsing error:', parseError);
+		  throw new Error('Failed to parse holdings response');
+		}
+
+		console.log('Parsed holdings:', data);
+
+		const formattedHoldings = data.map(holding => ({
+		  ...holding,
+		  amount: holding.amount?.toString() || '0',
+		  entry_price: holding.entry_price?.toString() || '0',
+		  current_price: holding.current_price?.toString() || '0'
+		}));
+
+		setHoldings(formattedHoldings);
+		console.log('Holdings updated successfully');
+		console.log('=== HOLDINGS FETCH COMPLETE ===\n');
+		
+		return true;
+	  } catch (error) {
+		console.error('Holdings fetch error:', error);
+		return false;
+	  }
+	};
 
   const calculateTotalValue = () => {
     const holdingsValue = holdings.reduce((total, holding) => {
