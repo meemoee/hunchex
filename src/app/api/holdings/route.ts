@@ -46,9 +46,15 @@ export async function GET() {
       .from(holdings)
       .leftJoin(markets, eq(holdings.market_id, markets.id))
       .leftJoin(
-        market_prices,
-        sql`${holdings.market_id} = ${market_prices.market_id} 
-            AND ${market_prices.timestamp} >= NOW() - INTERVAL '24 hours'`
+        sql`(
+          SELECT DISTINCT ON (market_id)
+            market_id, yes_price, no_price, best_ask, best_bid, 
+            last_traded_price, timestamp
+          FROM ${market_prices}
+          WHERE timestamp >= NOW() - INTERVAL '24 hours'
+          ORDER BY market_id, timestamp DESC
+        ) AS market_prices`,
+        sql`${holdings.market_id} = market_prices.market_id`
       )
       .where(eq(holdings.user_id, session.user.sub))
       .orderBy(desc(market_prices.timestamp));
