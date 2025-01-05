@@ -3,7 +3,7 @@ import { getSession } from "@auth0/nextjs-auth0/edge";
 import { cookies } from "next/headers";
 import { db } from "@/app/db";
 import { holdings, markets, market_prices } from "@/app/db/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, and, gte } from "drizzle-orm";
 
 export async function GET() {
   const cookieStore = cookies();
@@ -46,16 +46,32 @@ export async function GET() {
       .from(holdings)
       .leftJoin(markets, eq(holdings.market_id, markets.id))
       .leftJoin(
-        sql`(
-          SELECT DISTINCT ON (market_id)
-            market_id, yes_price, no_price, best_ask, best_bid, 
-            last_traded_price, timestamp
-          FROM ${market_prices}
-          WHERE timestamp >= NOW() - INTERVAL '24 hours'
-          ORDER BY market_id, timestamp DESC
-        ) AS market_prices`,
-        sql`${holdings.market_id} = market_prices.market_id`
+        market_prices,
+        and(
+          eq(holdings.market_id, market_prices.market_id),
+          gte(market_prices.timestamp, sql`NOW() - INTERVAL '24 hours'`)
+        )
       )
+      .groupBy(
+        holdings.id,
+        holdings.user_id,
+        holdings.market_id,
+        holdings.token_id,
+        holdings.position,
+        holdings.outcome,
+        holdings.amount,
+        holdings.entry_price,
+        holdings.created_at,
+        markets.question,
+        markets.image,
+        market_prices.yes_price,
+        market_prices.no_price,
+        market_prices.best_ask,
+        market_prices.best_bid,
+        market_prices.last_traded_price,
+        market_prices.timestamp
+      )
+      .having(sql`${market_prices.timestamp} = MAX(${market_prices.timestamp})`)
       .where(eq(holdings.user_id, session.user.sub))
       .orderBy(desc(market_prices.timestamp));
 
