@@ -74,7 +74,7 @@ export default function MoversListPage() {
       refreshUserData()
       setOrderSuccess(false)
     }
-  }, [orderSuccess, user])
+  }, [orderSuccess]) // Only depend on orderSuccess since we check user inside
 
   const fetchBalance = async () => {
     if (!user) return false
@@ -113,21 +113,11 @@ export default function MoversListPage() {
     if (!user) return
     setIsLoadingUserData(true)
     try {
-      const results = await Promise.all([
+      await Promise.all([
         fetchHoldings(),
         fetchBalance(),
         fetchActiveOrders()
       ])
-      
-      if (!results[0] || !results[1] || !results[2]) {
-        console.log('Initial fetch failed, retrying...')
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        await Promise.all([
-          fetchHoldings(),
-          fetchBalance(),
-          fetchActiveOrders()
-        ])
-      }
     } catch (error) {
       console.error('Error refreshing user data:', error)
     } finally {
@@ -204,8 +194,14 @@ export default function MoversListPage() {
   }, [balance, holdings])
 
   useEffect(() => {
+    let mounted = true
     if (user) {
-      refreshUserData()
+      refreshUserData().then(() => {
+        if (!mounted) return
+      })
+    }
+    return () => {
+      mounted = false
     }
   }, [user])
 
