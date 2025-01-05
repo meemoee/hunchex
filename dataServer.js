@@ -568,6 +568,13 @@ app.post('/api/invalidate-holdings', async (req, res) => {
   }
   try {
     await invalidateHoldingsCache(userId);
+    
+    // Notify connected clients about holdings update
+    broadcastToUser(userId, {
+      type: 'holdings_update',
+      timestamp: new Date().toISOString()
+    });
+    
     res.json({ message: 'Cache invalidated successfully' });
   } catch (error) {
     console.error('Error invalidating holdings cache:', error);
