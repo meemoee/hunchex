@@ -209,57 +209,81 @@ async function addHolding(userId, marketId, position, amount, price) {
 }
 
 async function getHoldings(userId) {
+  console.log("\n=== GET HOLDINGS START ===");
+  
   // Try to get from cache first
   const cacheKey = `holdings:${userId}`;
   const cachedHoldings = await redis.get(cacheKey);
   if (cachedHoldings) {
+    console.log("Cache hit:", cachedHoldings);
     return JSON.parse(cachedHoldings);
   }
 
-  // If not in cache, get from DB with optimized query
-  const query = `
-  WITH latest_prices AS (
-    SELECT DISTINCT ON (market_id) 
-      market_id,
-      yes_price,
-      no_price,
-      best_ask,
-      best_bid,
-      last_traded_price,
-      timestamp
-    FROM market_prices
+  console.log("Cache miss, querying database");
+
+  // First, verify we have price data
+  const priceCheck = await sql`
+    SELECT COUNT(*) 
+    FROM market_prices 
     WHERE timestamp >= NOW() - INTERVAL '24 hours'
-    ORDER BY market_id, timestamp DESC
-  )
-  SELECT 
-    h.id,
-    h.user_id,
-    h.market_id,
-    h.token_id,
-    h.outcome,
-    h.position,
-    h.amount,
-    h.entry_price,
-    h.created_at,
-    m.question,
-    m.image,
-    CASE 
-      WHEN h.outcome = 'Yes' THEN COALESCE(lp.yes_price, 0)
-      WHEN h.outcome = 'No' THEN COALESCE(lp.no_price, 0)
-      ELSE COALESCE(lp.last_traded_price, 0)
-    END as current_price
-  FROM holdings h
-  JOIN markets m ON h.market_id = m.id
-  LEFT JOIN latest_prices lp ON h.market_id = lp.market_id
-  WHERE h.user_id = $1
   `;
-  const values = [userId];
-  const result = await pool.query(query, values);
-  
-  // Cache the results for 5 minutes
-  await redis.setex(cacheKey, 300, JSON.stringify(result.rows));
-  
-  return result.rows;
+  console.log("Price records in last 24h:", priceCheck[0].count);
+
+  // Then check our holdings
+  const holdingsCheck = await sql`
+    SELECT COUNT(*) 
+    FROM holdings 
+    WHERE user_id = ${userId}
+  `;
+  console.log("Holdings for user:", holdingsCheck[0].count);
+
+  // Now run full query with logging
+  const holdings = await sql`
+    WITH latest_prices AS (
+        SELECT DISTINCT ON (market_id) 
+            market_id,
+            yes_price,
+            no_price,
+            best_ask,
+            best_bid,
+            last_traded_price,
+            timestamp
+        FROM market_prices
+        WHERE timestamp >= NOW() - INTERVAL '24 hours'
+        ORDER BY market_id, timestamp DESC
+    )
+    SELECT 
+        h.id,
+        h.user_id,
+        h.market_id,
+        h.token_id,
+        h.outcome,
+        h.position,
+        h.amount,
+        h.entry_price,
+        h.created_at,
+        m.question,
+        m.image,
+        CASE 
+            WHEN UPPER(h.outcome) = 'YES' THEN
+                COALESCE(lp.yes_price, lp.best_ask, lp.last_traded_price, 0)
+            WHEN UPPER(h.outcome) = 'NO' THEN
+                COALESCE(lp.no_price, 1 - lp.best_bid, 1 - lp.last_traded_price, 0)
+            ELSE
+                COALESCE(lp.last_traded_price, lp.best_bid, 0)
+        END as current_price
+    FROM holdings h
+    JOIN markets m ON h.market_id = m.id
+    LEFT JOIN latest_prices lp ON h.market_id = lp.market_id
+    WHERE h.user_id = ${userId}
+`;
+
+  console.log("Raw holdings response:", JSON.stringify(holdings, null, 2));
+  console.log("First holding fields:", holdings[0] ? Object.keys(holdings[0]) : 'No holdings');
+  console.log("=== GET HOLDINGS END ===\n");
+
+  await redis.setex(cacheKey, 300, JSON.stringify(holdings));
+  return holdings;
 }
 
 function generateToken(userId) {
@@ -467,24 +491,24 @@ app.post('/api/submit-order', async (req, res) => {
     if (req.body.price) {
       console.log('8a. Submitting limit order...');
       result = await orderManager.submitLimitOrder(
-        userId, 
-        req.body.marketId, 
-        tokenId,
-        req.body.outcome,
-        req.body.side,
-        req.body.size,
-        req.body.price
-      );
+		userId, 
+		req.body.marketId, 
+		tokenId,
+		req.body.outcome,
+		req.body.side === 'buy' ? OrderSide.BUY : OrderSide.SELL,  // Use the enum
+		req.body.size,
+		req.body.price
+	);
     } else {
       console.log('8b. Executing market order...');
       result = await orderManager.executeMarketOrder(
-        userId,
-        req.body.marketId,
-        tokenId,
-        req.body.outcome,
-        req.body.side,
-        req.body.size
-      );
+		  userId,
+		  req.body.marketId,
+		  tokenId,
+		  req.body.outcome,
+		  req.body.side === 'buy' ? OrderSide.BUY : OrderSide.SELL,  // Use the enum
+		  req.body.size
+		);
     }
 
     console.log('9. Order result:', result);
@@ -554,23 +578,23 @@ app.delete('/api/orders/:orderId', async (req, res) => {
   }
 });
 
-app.post('/api/holdings', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
+// Add this to dataServer.js with the other routes
+app.post('/api/invalidate-holdings', async (req, res) => {
+  const userId = req.headers['x-user-id'];
+  
   if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    return res.status(401).json({ error: 'User ID required' });
   }
-  const { marketId, position, amount, price } = req.body;
+
   try {
-    await addHolding(userId, marketId, position, amount, price);
-    res.json({ message: 'Holding added successfully' });
+    await invalidateHoldingsCache(userId);
+    res.json({ success: true });
   } catch (error) {
-    console.error('Error in /api/holdings:', error);
-    if (error.message === 'Insufficient balance') {
-      res.status(400).json({ error: 'Insufficient balance' });
-    } else {
-      res.status(500).json({ error: 'Error adding holding', details: error.toString() });
-    }
+    console.error('Error invalidating holdings cache:', error);
+    res.status(500).json({ 
+      error: 'Error invalidating cache', 
+      details: error.toString() 
+    });
   }
 });
 
@@ -2583,7 +2607,7 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, path: '/ws' });
 
 wss.on('connection', (ws) => {
-  console.log('WebSocket connection established');
+  console.log('WebSocket Connection Established', new Date().toISOString());
   
   const clientId = uuidv4();
   clients.set(clientId, ws);
@@ -2592,75 +2616,159 @@ wss.on('connection', (ws) => {
   const activeStreams = new Map();
   
   // Send the clientId to the client
-  ws.send(JSON.stringify({ type: 'client_id', clientId }));
+  ws.send(JSON.stringify({ 
+    type: 'client_id', 
+    clientId,
+    timestamp: new Date().toISOString()
+  }));
   
   ws.on('message', async (message) => {
     try {
-      const data = JSON.parse(message);
+      console.log('=== INCOMING WEBSOCKET MESSAGE ===');
+      console.log('Raw Message:', message.toString());
+      
+      const data = JSON.parse(message.toString());
+      
+      console.log('Parsed Message:', JSON.stringify(data, null, 2));
+      console.log('Message Type:', data.type);
       
       if (data.type === 'subscribe_orderbook') {
+        console.log('=== ORDERBOOK SUBSCRIPTION REQUEST ===');
         const { marketId, side } = data;
+        
+        console.log('Subscription Details:', {
+          marketId,
+          side,
+          timestamp: new Date().toISOString()
+        });
+        
+        // Detailed market type logging
+        const isKalshiMarket = marketId.includes('-');
+        const isPolymarket = marketId.startsWith('0x');
+        
+        console.log('Market Type Identification:', {
+          isKalshiMarket,
+          isPolymarket,
+          marketIdFormat: marketId
+        });
+        
         const streamKey = `${marketId}-${side}`;
         
         // Stop existing stream if any
         if (activeStreams.has(streamKey)) {
+          console.log(`Stopping existing stream for ${streamKey}`);
           activeStreams.get(streamKey).stop();
         }
         
-        // Create new stream based on market type
+        // Determine stream class based on market type
         const isYes = side.toUpperCase() === 'YES';
-        const isKalshiMarket = marketId.includes('-');
         const StreamClass = isKalshiMarket ? KalshiStream : PolymarketStream;
+        
+        console.log('Stream Class Selection:', {
+          selectedClass: StreamClass.name,
+          isYes,
+          side
+        });
         
         // Pass sql as an additional parameter
         const stream = new StreamClass(marketId, isYes, ws, sql);
         
-        // Initialize and start streaming if successful
-        const initialized = await stream.initialize();
-        if (initialized) {
-          activeStreams.set(streamKey, stream);
-          stream.connect();
-          console.log(`Started orderbook stream for ${marketId} ${side}`);
-        } else {
+        // Enhanced initialization logging
+        console.log('Attempting to Initialize Stream...');
+        const initStartTime = Date.now();
+        
+        try {
+          const initialized = await stream.initialize();
+          
+          const initDuration = Date.now() - initStartTime;
+          console.log('Stream Initialization Result:', {
+            success: initialized,
+            durationMs: initDuration
+          });
+          
+          if (initialized) {
+            activeStreams.set(streamKey, stream);
+            stream.connect();
+            
+            console.log('Stream Connected Successfully', {
+              marketId,
+              side,
+              streamKey
+            });
+          } else {
+            console.error('Stream Initialization Failed', {
+              marketId,
+              side,
+              streamKey
+            });
+            
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: 'Failed to initialize orderbook stream',
+              details: {
+                marketId,
+                side
+              }
+            }));
+          }
+        } catch (initError) {
+          console.error('Stream Initialization Exception:', {
+            error: initError.message,
+            stack: initError.stack
+          });
+          
           ws.send(JSON.stringify({
-            type: 'error',
-            message: 'Failed to initialize orderbook stream'
+            type: 'critical_error',
+            message: 'Critical error during stream initialization',
+            details: {
+              errorMessage: initError.message
+            }
           }));
         }
       } else if (data.type === 'unsubscribe_orderbook') {
-      // Handle unsubscribe
-      const { marketId, side } = data;
-      const streamKey = `${marketId}-${side}`;
-      
-      if (activeStreams.has(streamKey)) {
-        activeStreams.get(streamKey).stop();
-        activeStreams.delete(streamKey);
-        console.log(`Stopped orderbook stream for ${marketId} ${side}`);
-      }
-    } else if (data.type === 'price_update') {
-      console.log('Processing price update:', JSON.stringify(data, null, 2));
-      broadcastUpdate(data);
-    } else {
-      console.log('Broadcasting other message type');
-      wss.clients.forEach((client) => {
-        if (client !== ws && client.readyState === WebSocket.OPEN) {
-          client.send(message);
+        console.log('=== ORDERBOOK UNSUBSCRIPTION REQUEST ===');
+        const { marketId, side } = data;
+        const streamKey = `${marketId}-${side}`;
+        
+        if (activeStreams.has(streamKey)) {
+          console.log(`Stopping and removing stream: ${streamKey}`);
+          activeStreams.get(streamKey).stop();
+          activeStreams.delete(streamKey);
+        } else {
+          console.log(`No active stream found for: ${streamKey}`);
         }
+      } else {
+        console.log('Unhandled Message Type:', data.type);
+      }
+    } catch (error) {
+      console.error('WebSocket Message Processing Error:', {
+        error: error.message,
+        stack: error.stack,
+        originalMessage: message.toString()
       });
+      
+      ws.send(JSON.stringify({
+        type: 'processing_error',
+        message: 'Error processing WebSocket message',
+        details: {
+          errorMessage: error.message
+        }
+      }));
     }
-  } catch (error) {
-    console.error('Error processing WebSocket message:', error);
-    ws.send(JSON.stringify({
-      type: 'error',
-      message: `Error processing message: ${error.toString()}`
-    }));
-  }
-});
+  });
   
   ws.on('close', () => {
-    console.log('WebSocket connection closed');
+    console.log('WebSocket Connection Closed', {
+      clientId,
+      timestamp: new Date().toISOString()
+    });
+    
     // Clean up all streams for this connection
-    activeStreams.forEach(stream => stream.stop());
+    activeStreams.forEach(stream => {
+      console.log('Stopping orphaned stream:', stream);
+      stream.stop();
+    });
+    
     activeStreams.clear();
     clients.delete(clientId);
   });
