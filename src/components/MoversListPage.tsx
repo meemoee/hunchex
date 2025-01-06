@@ -239,17 +239,6 @@ export default function MoversListPage() {
             ]).catch(console.error);
           }
           break
-        case 'order_execution':
-          console.log('Order execution update received:', data);
-          if (data.needsHoldingsRefresh) {
-            console.log('Immediate holdings refresh required');
-            Promise.all([
-              fetchHoldings(),
-              fetchBalance(),
-              fetchActiveOrders()
-            ]).catch(console.error);
-          }
-          break
       }
     })
   }, [socket, isConnected, subscribeToUpdates])
