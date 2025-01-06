@@ -14,23 +14,7 @@ export async function GET() {
   }
 
   try {
-    // First create a CTE to get latest prices
-    const userHoldings = await db
-      .with('latest_prices', (qb) => 
-        qb.select({
-          market_id: market_prices.market_id,
-          yes_price: market_prices.yes_price,
-          no_price: market_prices.no_price,
-          best_ask: market_prices.best_ask,
-          best_bid: market_prices.best_bid,
-          last_traded_price: market_prices.last_traded_price,
-          timestamp: market_prices.timestamp
-        })
-        .from(market_prices)
-        .where(gte(market_prices.timestamp, sql`NOW() - INTERVAL '24 hours'`))
-        .qualify(sql`ROW_NUMBER() OVER (PARTITION BY market_id ORDER BY timestamp DESC) = 1`)
-      )
-      .select({
+    const userHoldings = await db.select({
         id: holdings.id,
         user_id: holdings.user_id,
         market_id: holdings.market_id,
@@ -61,8 +45,22 @@ export async function GET() {
       .from(holdings)
       .leftJoin(markets, eq(holdings.market_id, markets.id))
       .leftJoin(
-        'latest_prices',
-        eq(holdings.market_id, sql`latest_prices.market_id`)
+        sql`LATERAL (
+          SELECT 
+            market_id,
+            yes_price,
+            no_price,
+            best_ask,
+            best_bid,
+            last_traded_price,
+            timestamp
+          FROM ${market_prices}
+          WHERE ${market_prices.market_id} = ${holdings.market_id}
+          AND ${market_prices.timestamp} >= NOW() - INTERVAL '24 hours'
+          ORDER BY ${market_prices.timestamp} DESC
+          LIMIT 1
+        ) latest_prices ON true`,
+        undefined
       )
       .where(eq(holdings.user_id, session.user.sub))
       .orderBy(desc(sql`latest_prices.timestamp`));
