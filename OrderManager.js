@@ -303,7 +303,7 @@ async executeMarketOrder(userId, marketId, tokenId, outcome, side, size) {
         await this.sql`COMMIT`;
 
         // Broadcast immediate execution update
-        broadcastToUser(userId, {
+        this.broadcastToUser(userId, {
             type: 'order_execution',
             needsHoldingsRefresh: true,
             timestamp: new Date().toISOString(),
@@ -315,7 +315,7 @@ async executeMarketOrder(userId, marketId, tokenId, outcome, side, size) {
         await new Promise(resolve => setTimeout(resolve, 100));
 
         // Broadcast holdings update to refresh UI
-        broadcastToUser(userId, {
+        this.broadcastToUser(userId, {
             type: 'holdings_update',
             timestamp: new Date().toISOString()
         });
