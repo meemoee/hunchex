@@ -14,7 +14,22 @@ export async function GET() {
   }
 
   try {
+    // First create a CTE to get latest prices
     const userHoldings = await db
+      .with('latest_prices', (qb) => 
+        qb.select({
+          market_id: market_prices.market_id,
+          yes_price: market_prices.yes_price,
+          no_price: market_prices.no_price,
+          best_ask: market_prices.best_ask,
+          best_bid: market_prices.best_bid,
+          last_traded_price: market_prices.last_traded_price,
+          timestamp: market_prices.timestamp
+        })
+        .from(market_prices)
+        .where(gte(market_prices.timestamp, sql`NOW() - INTERVAL '24 hours'`))
+        .qualify(sql`ROW_NUMBER() OVER (PARTITION BY market_id ORDER BY timestamp DESC) = 1`)
+      )
       .select({
         id: holdings.id,
         user_id: holdings.user_id,
@@ -46,32 +61,9 @@ export async function GET() {
       .from(holdings)
       .leftJoin(markets, eq(holdings.market_id, markets.id))
       .leftJoin(
-        market_prices,
-        and(
-          eq(holdings.market_id, market_prices.market_id),
-          gte(market_prices.timestamp, sql`NOW() - INTERVAL '24 hours'`)
-        )
+        'latest_prices',
+        eq(holdings.market_id, sql`latest_prices.market_id`)
       )
-      .groupBy(
-        holdings.id,
-        holdings.user_id,
-        holdings.market_id,
-        holdings.token_id,
-        holdings.position,
-        holdings.outcome,
-        holdings.amount,
-        holdings.entry_price,
-        holdings.created_at,
-        markets.question,
-        markets.image,
-        market_prices.yes_price,
-        market_prices.no_price,
-        market_prices.best_ask,
-        market_prices.best_bid,
-        market_prices.last_traded_price,
-        market_prices.timestamp
-      )
-      .having(sql`${market_prices.timestamp} = MAX(${market_prices.timestamp})`)
       .where(eq(holdings.user_id, session.user.sub))
       .orderBy(desc(market_prices.timestamp));
 
