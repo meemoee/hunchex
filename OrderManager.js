@@ -192,125 +192,147 @@ class OrderManager {
         }
     }
 
-    async executeMarketOrder(userId, marketId, tokenId, outcome, side, size) {
-        try {
-            await this.sql`BEGIN`;
+    // In OrderManager.js
+async executeMarketOrder(userId, marketId, tokenId, outcome, side, size) {
+    try {
+        await this.sql`BEGIN`;
 
-            await this.validateOrder(userId, marketId, tokenId, outcome, side, OrderType.MARKET, size);
+        // Validate the order
+        await this.validateOrder(userId, marketId, tokenId, outcome, side, OrderType.MARKET, size);
+        
+        // Get orderbook snapshot for execution
+        const book = await this.getOrderbookSnapshot(marketId, tokenId);
+        
+        let remainingSize = new Decimal(size);
+        let totalCost = new Decimal(0);
+        let filledSize = new Decimal(0);
+        
+        const levels = side === OrderSide.BUY ? book.asks : book.bids;
+        
+        // Calculate fills
+        for (const level of levels) {
+            if (remainingSize.lte(0)) break;
             
-            const book = await this.getOrderbookSnapshot(marketId, tokenId);
-            
-            let remainingSize = new Decimal(size);
-            let totalCost = new Decimal(0);
-            let filledSize = new Decimal(0);
-            
-            const levels = side === OrderSide.BUY ? book.asks : book.bids;
-            
-            for (const level of levels) {
-                if (remainingSize.lte(0)) break;
-                
-                const fillSize = Decimal.min(remainingSize, level.size);
-                totalCost = totalCost.plus(fillSize.times(level.price));
-                filledSize = filledSize.plus(fillSize);
-                remainingSize = remainingSize.minus(fillSize);
-            }
-            
-            if (filledSize.eq(0)) {
-                await this.sql`ROLLBACK`;
-                throw new Error('Could not fill any quantity');
-            }
-            
-            if (remainingSize.gt(0)) {
-                await this.sql`ROLLBACK`;
-                throw new Error('Partial fill only - insufficient liquidity');
-            }
-            
-            const avgPrice = totalCost.div(filledSize);
-            
-            // Check for existing holdings
-            const existingHoldings = await this.sql`
-                SELECT id, amount::text, entry_price::text
-                FROM holdings
-                WHERE user_id = ${userId}
-                AND market_id = ${marketId}
-                AND token_id = ${tokenId}
-                FOR UPDATE
-            `;
-
-            if (existingHoldings.length > 0) {
-                // Update existing holdings
-                const current = existingHoldings[0];
-                const currentAmount = new Decimal(current.amount);
-                const currentPrice = new Decimal(current.entry_price);
-                const newAmount = currentAmount.plus(filledSize);
-                const newPrice = currentAmount.times(currentPrice)
-                    .plus(filledSize.times(avgPrice))
-                    .div(newAmount);
-
-                await this.sql`
-                    UPDATE holdings
-                    SET amount = CAST(${newAmount.toString()} AS NUMERIC),
-                        entry_price = CAST(${newPrice.toString()} AS NUMERIC)
-                    WHERE id = ${current.id}
-                `;
-            } else {
-                // Insert new holdings
-                await this.sql`
-                    INSERT INTO holdings
-                    (user_id, market_id, token_id, outcome, position, amount, entry_price)
-                    VALUES (
-                        ${userId},
-                        ${marketId},
-                        ${tokenId},
-                        ${outcome},
-                        ${side},
-                        CAST(${filledSize.toString()} AS NUMERIC),
-                        CAST(${avgPrice.toString()} AS NUMERIC)
-                    )
-                `;
-            }
-            
-            // Update user balance with CAST
-            await this.sql`
-                UPDATE users 
-                SET balance = balance - CAST(${totalCost.toString()} AS NUMERIC)
-                WHERE auth0_id = ${userId}
-            `;
-            
-            // Insert order record with CAST
-            const orderResult = await this.sql`
-                INSERT INTO orders 
-                (user_id, market_id, token_id, outcome, side, size, price, order_type, status)
-                VALUES (
-                    ${userId}, 
-                    ${marketId}, 
-                    ${tokenId}, 
-                    ${outcome}, 
-                    ${side}, 
-                    CAST(${filledSize.toString()} AS NUMERIC), 
-                    CAST(${avgPrice.toString()} AS NUMERIC), 
-                    ${OrderType.MARKET}, 
-                    'completed'
-                )
-                RETURNING id
-            `;
-            
-            await this.sql`COMMIT`;
-            
-            return {
-                success: true,
-                filledSize: filledSize.toNumber(),
-                avgPrice: avgPrice.toNumber(),
-                remainingSize: remainingSize.toNumber(),
-                orderId: orderResult[0].id
-            };
-            
-        } catch (err) {
-            await this.sql`ROLLBACK`;
-            console.error('Market order execution error:', err);
-            throw err;
+            const fillSize = Decimal.min(remainingSize, level.size);
+            totalCost = totalCost.plus(fillSize.times(level.price));
+            filledSize = filledSize.plus(fillSize);
+            remainingSize = remainingSize.minus(fillSize);
         }
+        
+        if (filledSize.eq(0)) {
+            await this.sql`ROLLBACK`;
+            throw new Error('Could not fill any quantity');
+        }
+        
+        if (remainingSize.gt(0)) {
+            await this.sql`ROLLBACK`;
+            throw new Error('Partial fill only - insufficient liquidity');
+        }
+        
+        const avgPrice = totalCost.div(filledSize);
+        
+        // Check for existing holdings
+        const existingHoldings = await this.sql`
+            SELECT id, amount::text, entry_price::text
+            FROM holdings
+            WHERE user_id = ${userId}
+            AND market_id = ${marketId}
+            AND token_id = ${tokenId}
+            FOR UPDATE
+        `;
+
+        // Update or create holdings
+        if (existingHoldings.length > 0) {
+            const current = existingHoldings[0];
+            const currentAmount = new Decimal(current.amount);
+            const currentPrice = new Decimal(current.entry_price);
+            const newAmount = currentAmount.plus(filledSize);
+            const newPrice = currentAmount.times(currentPrice)
+                .plus(filledSize.times(avgPrice))
+                .div(newAmount);
+
+            await this.sql`
+                UPDATE holdings
+                SET amount = CAST(${newAmount.toString()} AS NUMERIC),
+                    entry_price = CAST(${newPrice.toString()} AS NUMERIC)
+                WHERE id = ${current.id}
+            `;
+        } else {
+            await this.sql`
+                INSERT INTO holdings
+                (user_id, market_id, token_id, outcome, position, amount, entry_price)
+                VALUES (
+                    ${userId},
+                    ${marketId},
+                    ${tokenId},
+                    ${outcome},
+                    ${side},
+                    CAST(${filledSize.toString()} AS NUMERIC),
+                    CAST(${avgPrice.toString()} AS NUMERIC)
+                )
+            `;
+        }
+        
+        // Update user balance
+        await this.sql`
+            UPDATE users 
+            SET balance = balance - CAST(${totalCost.toString()} AS NUMERIC)
+            WHERE auth0_id = ${userId}
+        `;
+        
+        // Insert order record
+        const orderResult = await this.sql`
+            INSERT INTO orders 
+            (user_id, market_id, token_id, outcome, side, size, price, order_type, status)
+            VALUES (
+                ${userId}, 
+                ${marketId}, 
+                ${tokenId}, 
+                ${outcome}, 
+                ${side}, 
+                CAST(${filledSize.toString()} AS NUMERIC), 
+                CAST(${avgPrice.toString()} AS NUMERIC), 
+                ${OrderType.MARKET}, 
+                'completed'
+            )
+            RETURNING id
+        `;
+        
+        await this.sql`COMMIT`;
+
+        // Broadcast immediate execution update
+        broadcastToUser(userId, {
+            type: 'order_execution',
+            needsHoldingsRefresh: true,
+            timestamp: new Date().toISOString(),
+            orderId: orderResult[0].id,
+            orderType: 'market'
+        });
+
+        // Small delay to ensure DB commit is complete
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Broadcast holdings update to refresh UI
+        broadcastToUser(userId, {
+            type: 'holdings_update',
+            timestamp: new Date().toISOString()
+        });
+        
+        return {
+            success: true,
+            filledSize: filledSize.toNumber(),
+            avgPrice: avgPrice.toNumber(),
+            remainingSize: remainingSize.toNumber(),
+            orderId: orderResult[0].id
+        };
+        
+    } catch (err) {
+        await this.sql`ROLLBACK`;
+        console.error('Market order execution error:', err);
+        throw err;
     }
+}
+
 
     async submitLimitOrder(userId, marketId, tokenId, outcome, side, size, price) {
         try {

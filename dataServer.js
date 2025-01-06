@@ -191,10 +191,6 @@ app.use((req, res, next) => {
   next();
 });
 
-async function invalidateHoldingsCache(userId) {
-  const cacheKey = `holdings:${userId}`;
-  await redis.del(cacheKey);
-}
 
 async function addHolding(userId, marketId, position, amount, price) {
   const client = await pool.connect();
@@ -242,82 +238,60 @@ async function addHolding(userId, marketId, position, amount, price) {
   }
 }
 
+// In dataServer.js
 async function getHoldings(userId) {
-  console.log("\n=== GET HOLDINGS START ===");
-  
-  // Try to get from cache first
-  const cacheKey = `holdings:${userId}`;
-  const cachedHoldings = await redis.get(cacheKey);
-  if (cachedHoldings) {
-    console.log("Cache hit:", cachedHoldings);
-    return JSON.parse(cachedHoldings);
-  }
+    console.log("\n=== GET HOLDINGS START ===");
+    
+    try {
+        // Direct database query with all required joins and fields
+        const holdings = await sql`
+            WITH latest_prices AS (
+                SELECT DISTINCT ON (market_id) 
+                    market_id,
+                    yes_price,
+                    no_price,
+                    best_ask,
+                    best_bid,
+                    last_traded_price,
+                    timestamp
+                FROM market_prices
+                WHERE timestamp >= NOW() - INTERVAL '24 hours'
+                ORDER BY market_id, timestamp DESC
+            )
+            SELECT 
+                h.id,
+                h.user_id,
+                h.market_id,
+                h.token_id,
+                h.outcome,
+                h.position,
+                h.amount,
+                h.entry_price,
+                h.created_at,
+                m.question,
+                m.image,
+                CASE 
+                    WHEN UPPER(h.outcome) = 'YES' THEN
+                        COALESCE(lp.yes_price, lp.best_ask, lp.last_traded_price, 0)
+                    WHEN UPPER(h.outcome) = 'NO' THEN
+                        COALESCE(lp.no_price, 1 - lp.best_bid, 1 - lp.last_traded_price, 0)
+                    ELSE
+                        COALESCE(lp.last_traded_price, lp.best_bid, 0)
+                END as current_price
+            FROM holdings h
+            JOIN markets m ON h.market_id = m.id
+            LEFT JOIN latest_prices lp ON h.market_id = lp.market_id
+            WHERE h.user_id = ${userId}
+            ORDER BY h.created_at DESC
+        `;
 
-  console.log("Cache miss, querying database");
+        console.log("=== GET HOLDINGS END ===\n");
 
-  // First, verify we have price data
-  const priceCheck = await sql`
-    SELECT COUNT(*) 
-    FROM market_prices 
-    WHERE timestamp >= NOW() - INTERVAL '24 hours'
-  `;
-  console.log("Price records in last 24h:", priceCheck[0].count);
-
-  // Then check our holdings
-  const holdingsCheck = await sql`
-    SELECT COUNT(*) 
-    FROM holdings 
-    WHERE user_id = ${userId}
-  `;
-  console.log("Holdings for user:", holdingsCheck[0].count);
-
-  // Now run full query with logging
-  const holdings = await sql`
-    WITH latest_prices AS (
-        SELECT DISTINCT ON (market_id) 
-            market_id,
-            yes_price,
-            no_price,
-            best_ask,
-            best_bid,
-            last_traded_price,
-            timestamp
-        FROM market_prices
-        WHERE timestamp >= NOW() - INTERVAL '24 hours'
-        ORDER BY market_id, timestamp DESC
-    )
-    SELECT 
-        h.id,
-        h.user_id,
-        h.market_id,
-        h.token_id,
-        h.outcome,
-        h.position,
-        h.amount,
-        h.entry_price,
-        h.created_at,
-        m.question,
-        m.image,
-        CASE 
-            WHEN UPPER(h.outcome) = 'YES' THEN
-                COALESCE(lp.yes_price, lp.best_ask, lp.last_traded_price, 0)
-            WHEN UPPER(h.outcome) = 'NO' THEN
-                COALESCE(lp.no_price, 1 - lp.best_bid, 1 - lp.last_traded_price, 0)
-            ELSE
-                COALESCE(lp.last_traded_price, lp.best_bid, 0)
-        END as current_price
-    FROM holdings h
-    JOIN markets m ON h.market_id = m.id
-    LEFT JOIN latest_prices lp ON h.market_id = lp.market_id
-    WHERE h.user_id = ${userId}
-`;
-
-  console.log("Raw holdings response:", JSON.stringify(holdings, null, 2));
-  console.log("First holding fields:", holdings[0] ? Object.keys(holdings[0]) : 'No holdings');
-  console.log("=== GET HOLDINGS END ===\n");
-
-  await redis.setex(cacheKey, 300, JSON.stringify(holdings));
-  return holdings;
+        return holdings;
+    } catch (error) {
+        console.error('Error fetching holdings:', error);
+        throw error;
+    }
 }
 
 function generateToken(userId) {
@@ -546,14 +520,6 @@ app.post('/api/submit-order', async (req, res) => {
     }
 
     console.log('9. Order result:', result);
-    console.log('Debug (dataServer): About to invalidate holdings cache for userId =', userId);
-
-    // Invalidate holdings cache before broadcasting
-    const cacheKey = `holdings:${userId}`;
-    console.log('Debug (dataServer): Invalidating cache key:', cacheKey);
-    await redis.del(cacheKey);
-    console.log('Debug (dataServer): Cache invalidated successfully');
-
     console.log('Debug (dataServer): About to broadcast order_execution with userId =', userId);
       
     // First broadcast order execution update
@@ -593,28 +559,6 @@ app.post('/api/submit-order', async (req, res) => {
     res.status(500).json({ error: error.message });
   } finally {
     console.log('=== EXPRESS BACKEND END ===\n');
-  }
-});
-
-app.post('/api/invalidate-holdings', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  try {
-    await invalidateHoldingsCache(userId);
-    
-    // Notify connected clients about holdings update
-    broadcastToUser(userId, {
-      type: 'holdings_update',
-      timestamp: new Date().toISOString()
-    });
-    
-    res.json({ message: 'Cache invalidated successfully' });
-  } catch (error) {
-    console.error('Error invalidating holdings cache:', error);
-    res.status(500).json({ error: 'Error invalidating cache' });
   }
 });
 
@@ -744,17 +688,6 @@ app.get('/api/active-orders', async (req, res) => {
   } catch (error) {
     console.error('Error in /api/active-orders:', error);
     res.status(500).json({ error: 'Error fetching active orders', details: error.toString() });
-  }
-});
-
-app.get('/api/holdings', checkJwt, async (req, res) => {
-  const userId = req.auth.sub; // Auth0 user ID
-  try {
-    const holdings = await getHoldings(userId);
-    res.json(holdings);
-  } catch (error) {
-    console.error('Error in /api/holdings:', error);
-    res.status(500).json({ error: 'Error fetching holdings', details: error.toString() });
   }
 });
 
