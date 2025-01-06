@@ -11,16 +11,30 @@ export function useWebSocket() {
   useEffect(() => {
     if (!user) return;
 
-    const ws = new WebSocket('ws://localhost:3001/ws');
-
-    ws.onopen = () => {
-      // Authenticate the WebSocket connection
-      ws.send(JSON.stringify({
-        type: 'auth',
-        userId: user.sub
-      }));
-      setIsConnected(true);
+    // Get Auth0 access token from session
+    const getAccessToken = async () => {
+      const response = await fetch('/api/auth/token');
+      const { accessToken } = await response.json();
+      return accessToken;
     };
+
+    getAccessToken().then(token => {
+      const ws = new WebSocket('ws://localhost:3001/ws');
+
+      ws.onopen = () => {
+        // Authenticate with Auth0 token
+        ws.send(JSON.stringify({
+          type: 'auth',
+          token: token
+        }));
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'auth_success') {
+          setIsConnected(true);
+        }
+      };
 
     ws.onclose = () => {
       setIsConnected(false);
