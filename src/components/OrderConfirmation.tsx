@@ -114,12 +114,33 @@ export function OrderConfirmation({
   const { user } = useUser()
 
   const handleSubmitOrder = async () => {
-    if (!mover || !amount || !price || !user) return;
+    if (!mover || !amount || !user) return;
 
     try {
       const res = await fetch('/api/auth/me');
       const session = await res.json();
       const accessToken = session.accessToken;
+
+      // Determine order type and validate parameters
+      const size = Number(amount);
+      if (isNaN(size) || size <= 0) {
+        setOrderStatus({
+          type: 'error',
+          message: 'Invalid order size'
+        });
+        return;
+      }
+
+      const orderData = {
+        marketId: mover.market_id,
+        outcome: selectedOutcome,
+        side: action,
+        size: size,
+        price: orderType === 'limit' ? price : undefined,
+        orderType: orderType || (price ? 'limit' : 'market')
+      };
+
+      console.log('Submitting order:', orderData);
 
       const response = await fetch('/api/submit-order', {
         method: 'POST',
@@ -127,17 +148,12 @@ export function OrderConfirmation({
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`
         },
-        body: JSON.stringify({
-          marketId: mover.market_id,
-          outcome: selectedOutcome,
-          side: action,
-          size: Number(amount),
-          price: price
-        })
+        body: JSON.stringify(orderData)
       });
 
       if (!response.ok) {
         const error = await response.json();
+        console.error('Order submission failed:', error);
         setOrderStatus({
           type: 'error',
           message: error.error || 'Failed to submit order'
@@ -146,12 +162,20 @@ export function OrderConfirmation({
       }
 
       const result = await response.json();
+      console.log('Order submission successful:', result);
+      
       setOrderStatus({
         type: 'success',
-        message: 'Order submitted successfully'
+        message: `${orderType.toUpperCase()} order submitted successfully`
       });
+
+      // Handle immediate execution for market orders
+      if (result.needsHoldingsRefresh || orderType === 'market') {
+        console.log('Refreshing user data after market order');
+        await onRefreshUserData();
+      }
+
       onOrderSuccess();
-      onRefreshUserData();
 
     } catch (error) {
       console.error('Error submitting order:', error);
