@@ -546,6 +546,13 @@ app.post('/api/submit-order', async (req, res) => {
     }
 
     console.log('9. Order result:', result);
+    
+    // Broadcast order update to user
+    broadcastToUser(userId, {
+      type: 'orders_update',
+      timestamp: new Date().toISOString()
+    });
+
     res.json(result);
 
   } catch (error) {
