@@ -103,15 +103,22 @@ export default function MoversListPage() {
     }
   }
 
-  const refreshUserData = async () => {
+  const refreshUserData = async (options = { immediate: false }) => {
     if (!user) return
+    
+    console.log('Refreshing user data:', options);
     setIsLoadingUserData(true)
+    
     try {
       await Promise.all([
-        fetchHoldings(),
+        fetchHoldings({ forceRefresh: options.immediate }),
         fetchBalance(),
         fetchActiveOrders()
       ])
+      
+      if (options.immediate) {
+        console.log('Immediate refresh completed');
+      }
     } catch (error) {
       console.error('Error refreshing user data:', error)
     } finally {
@@ -119,59 +126,60 @@ export default function MoversListPage() {
     }
   }
 
-  const fetchHoldings = async () => {
-	  if (!user) return false;
-	  try {
-		console.log('\n=== FETCHING HOLDINGS ===');
-		
-		// First invalidate the cache
-		console.log('Invalidating holdings cache...');
-		const invalidateResponse = await fetch('/api/invalidate-holdings', {
-		  method: 'POST'
-		});
-		
-		if (!invalidateResponse.ok) {
-		  console.warn('Cache invalidation failed:', await invalidateResponse.text());
-		}
-		
-		// Then fetch fresh holdings
-		console.log('Fetching fresh holdings...');
-		const response = await fetch('/api/holdings');
-		
-		if (!response.ok) {
-		  throw new Error(`Holdings fetch failed: ${response.status}`);
-		}
+  const fetchHoldings = async (options = { forceRefresh: false }) => {
+    if (!user) return false;
+    try {
+      console.log('\n=== FETCHING HOLDINGS ===');
+      console.log('Options:', options);
+      
+      if (options.forceRefresh) {
+        console.log('Force refresh requested, invalidating cache...');
+        const invalidateResponse = await fetch('/api/invalidate-holdings', {
+          method: 'POST'
+        });
+        
+        if (!invalidateResponse.ok) {
+          console.warn('Cache invalidation failed:', await invalidateResponse.text());
+        }
+      }
+      
+      console.log('Fetching holdings...');
+      const response = await fetch('/api/holdings');
+      
+      if (!response.ok) {
+        throw new Error(`Holdings fetch failed: ${response.status}`);
+      }
 
-		const rawText = await response.text();
-		console.log('Raw response:', rawText);
+      const rawText = await response.text();
+      console.log('Raw response length:', rawText.length);
 
-		let data;
-		try {
-		  data = JSON.parse(rawText);
-		} catch (parseError) {
-		  console.error('JSON parsing error:', parseError);
-		  throw new Error('Failed to parse holdings response');
-		}
+      let data;
+      try {
+        data = JSON.parse(rawText);
+      } catch (parseError) {
+        console.error('JSON parsing error:', parseError);
+        throw new Error('Failed to parse holdings response');
+      }
 
-		console.log('Parsed holdings:', data);
+      console.log('Holdings count:', data.length);
 
-		const formattedHoldings = data.map(holding => ({
-		  ...holding,
-		  amount: holding.amount?.toString() || '0',
-		  entry_price: holding.entry_price?.toString() || '0',
-		  current_price: holding.current_price?.toString() || '0'
-		}));
+      const formattedHoldings = data.map(holding => ({
+        ...holding,
+        amount: holding.amount?.toString() || '0',
+        entry_price: holding.entry_price?.toString() || '0',
+        current_price: holding.current_price?.toString() || '0'
+      }));
 
-		setHoldings(formattedHoldings);
-		console.log('Holdings updated successfully');
-		console.log('=== HOLDINGS FETCH COMPLETE ===\n');
-		
-		return true;
-	  } catch (error) {
-		console.error('Holdings fetch error:', error);
-		return false;
-	  }
-	};
+      setHoldings(formattedHoldings);
+      console.log('Holdings updated successfully');
+      console.log('=== HOLDINGS FETCH COMPLETE ===\n');
+      
+      return true;
+    } catch (error) {
+      console.error('Holdings fetch error:', error);
+      return false;
+    }
+  };
 
   const calculateTotalValue = () => {
     const holdingsValue = holdings.reduce((total, holding) => {
@@ -204,18 +212,32 @@ export default function MoversListPage() {
     subscribeToUpdates((type, data) => {
       switch (type) {
         case 'holdings_update':
+          console.log('Holdings update received, refreshing...');
           fetchHoldings()
           break
         case 'balance_update':
           if (data.balance !== undefined) {
+            console.log('Balance update received:', data.balance);
             setBalance(data.balance)
           }
           break
         case 'orders_update':
+          console.log('Orders update received, refreshing...');
           fetchActiveOrders()
           break
         case 'price_update':
           updateMoverData(data)
+          break
+        case 'order_execution':
+          console.log('Order execution update received:', data);
+          if (data.needsHoldingsRefresh) {
+            console.log('Immediate holdings refresh required');
+            Promise.all([
+              fetchHoldings(),
+              fetchBalance(),
+              fetchActiveOrders()
+            ]).catch(console.error);
+          }
           break
       }
     })
