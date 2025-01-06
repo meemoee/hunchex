@@ -268,8 +268,8 @@ export function OrderConfirmation({
     }
   }
 
-  const [hasInitiallyCentered, setHasInitiallyCentered] = useState(false)
   const [localOrderbook, setLocalOrderbook] = useState<OrderbookData | null>(initialOrderbook || null)
+  const [hasInitiallyCentered, setHasInitiallyCentered] = useState(false)
   const { socket, isConnected, subscribeToMarket, unsubscribeFromMarket, subscribeToUpdates } = useWebSocket()
 
   // Handle WebSocket subscription
