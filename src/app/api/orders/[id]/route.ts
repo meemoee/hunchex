@@ -9,14 +9,20 @@ export async function DELETE(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  console.log('DELETE request received for order:', params.id);
+  
   const cookieStore = cookies();
   const session = await getSession({ cookies: () => cookieStore });
 
+  console.log('Session user:', session?.user?.sub);
+
   if (!session?.user) {
+    console.log('Unauthorized - No session user');
     return new Response("Unauthorized", { status: 401 });
   }
 
   try {
+    console.log('Checking if order exists...');
     // First verify the order exists and belongs to the user
     const ordersToCancel = await db
       .select()
@@ -29,12 +35,17 @@ export async function DELETE(
         )
       );
 
+    console.log('Found orders:', ordersToCancel);
+
     if (ordersToCancel.length === 0) {
+      console.log('No active orders found for cancellation');
       return NextResponse.json(
         { error: "Order not found or already cancelled" },
         { status: 404 }
       );
     }
+
+    console.log('Attempting to cancel order...');
 
     // Update order status to cancelled
     await db

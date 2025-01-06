@@ -517,19 +517,23 @@ export default function MoversListPage() {
                           </div>
                           <button
                             onClick={async () => {
+                              // Optimistically remove the order
+                              setActiveOrders(prev => prev.filter(o => o.id !== order.id));
+                              
                               try {
                                 const response = await fetch(`/api/orders/${order.id}`, {
                                   method: 'DELETE'
                                 });
                                 
-                                if (response.ok) {
-                                  await fetchActiveOrders();
-                                } else {
+                                if (!response.ok) {
+                                  // Revert on error
                                   const error = await response.json();
                                   console.error('Error cancelling order:', error);
+                                  await fetchActiveOrders(); // Refresh to get accurate state
                                 }
                               } catch (error) {
                                 console.error('Error cancelling order:', error);
+                                await fetchActiveOrders(); // Refresh to get accurate state
                               }
                             }}
                             className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-gray-700 transition-colors"
