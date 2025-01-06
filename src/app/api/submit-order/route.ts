@@ -54,17 +54,32 @@ export async function POST(request: Request) {
     }
 
     // Enhance response with client-side guidance
+    // Always include full order details and refresh flags
     const enhancedResponse = {
       ...responseData,
-      needsHoldingsRefresh: orderData.orderType === 'market' || responseData.immediateExecution,
+      needsHoldingsRefresh: true, // Always refresh for consistency
+      shouldRefreshOrders: true,
       requestId,
-      orderType: orderData.orderType
+      orderType: orderData.orderType,
+      orderDetails: {
+        marketId: orderData.marketId,
+        outcome: orderData.outcome,
+        side: orderData.side,
+        size: orderData.size,
+        price: orderData.price,
+        status: responseData.status || 'pending',
+        timestamp: new Date().toISOString()
+      }
     };
 
     console.log(`[${requestId}] Order submission successful:`, {
       orderId: responseData.orderId,
       orderType: orderData.orderType,
-      needsHoldingsRefresh: enhancedResponse.needsHoldingsRefresh
+      marketId: orderData.marketId,
+      side: orderData.side,
+      size: orderData.size,
+      needsHoldingsRefresh: true,
+      shouldRefreshOrders: true
     });
 
     return NextResponse.json(enhancedResponse);
