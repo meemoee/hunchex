@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useWebSocket } from '@/hooks/useWebSocket'
 import { Bell, Menu, ChevronLeft } from 'lucide-react'
 import { type TopMover } from '@/types/mover'
 import dynamic from 'next/dynamic'
@@ -56,7 +57,6 @@ export default function MoversListPage() {
   const [topMovers, setTopMovers] = useState<TopMover[]>([])
   const [error, setError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
-  const [orderSuccess, setOrderSuccess] = useState(false)
   const [hasMore, setHasMore] = useState(true)
   const [selectedInterval, setSelectedInterval] = useState('240')
   const [openMarketsOnly, setOpenMarketsOnly] = useState(false)
@@ -69,12 +69,6 @@ export default function MoversListPage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [isLoadingUserData, setIsLoadingUserData] = useState(false)
 
-  useEffect(() => {
-    if (orderSuccess && user) {
-      refreshUserData()
-      setOrderSuccess(false)
-    }
-  }, [orderSuccess]) // Only depend on orderSuccess since we check user inside
 
   const fetchBalance = async () => {
     if (!user) return false
@@ -194,27 +188,38 @@ export default function MoversListPage() {
   }, [balance, holdings])
 
   useEffect(() => {
-    let mounted = true
     if (user) {
-      refreshUserData().then(() => {
-        if (!mounted) return
-      })
-    }
-    return () => {
-      mounted = false
+      // Initial data load
+      fetchHoldings()
+      fetchBalance()
+      fetchActiveOrders()
     }
   }, [user])
 
+  const { socket, isConnected, subscribeToUpdates } = useWebSocket()
+
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:3001/ws')
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data)
-      if (data.type === 'price_update') {
-        updateMoverData(data.data)
+    if (!socket || !isConnected) return
+
+    subscribeToUpdates((type, data) => {
+      switch (type) {
+        case 'holdings_update':
+          fetchHoldings()
+          break
+        case 'balance_update':
+          if (data.balance !== undefined) {
+            setBalance(data.balance)
+          }
+          break
+        case 'orders_update':
+          fetchActiveOrders()
+          break
+        case 'price_update':
+          updateMoverData(data)
+          break
       }
-    }
-    return () => ws.close()
-  }, [])
+    })
+  }, [socket, isConnected, subscribeToUpdates])
 
   const updateMoverData = (updateData: any) => {
     setTopMovers(prevMovers => {
