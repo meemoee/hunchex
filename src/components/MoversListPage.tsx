@@ -146,7 +146,9 @@ export default function MoversListPage() {
       }
       
       console.log('Fetching holdings...');
-      const response = await fetch('/api/holdings');
+      const response = await fetch('/api/holdings', {
+        credentials: 'include'
+      });
       
       if (!response.ok) {
         throw new Error(`Holdings fetch failed: ${response.status}`);
