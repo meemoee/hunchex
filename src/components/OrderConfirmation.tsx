@@ -220,8 +220,10 @@ export function OrderConfirmation({
 
   // Update order type whenever price changes
   useEffect(() => {
-    updateOrderType(price)
-  }, [price, localOrderbook, action])
+    if (localOrderbook?.data) {
+      updateOrderType(price)
+    }
+  }, [price, localOrderbook?.data, action])
 
   const orderbookRef = useRef<HTMLDivElement>(null)
   const previousScrollPosition = useRef(0)
