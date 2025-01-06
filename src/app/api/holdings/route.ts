@@ -44,19 +44,19 @@ export async function GET() {
         image: markets.image,
         current_price: sql`CASE 
           WHEN UPPER(${holdings.outcome}) = 'YES' THEN
-              COALESCE(${market_prices.yes_price}, ${market_prices.best_ask}, ${market_prices.last_traded_price}, 0)
+              COALESCE(latest_prices.yes_price, latest_prices.best_ask, latest_prices.last_traded_price, 0)
           WHEN UPPER(${holdings.outcome}) = 'NO' THEN
-              COALESCE(${market_prices.no_price}, 1 - ${market_prices.best_bid}, 1 - ${market_prices.last_traded_price}, 0)
+              COALESCE(latest_prices.no_price, 1 - latest_prices.best_bid, 1 - latest_prices.last_traded_price, 0)
           ELSE
-              COALESCE(${market_prices.last_traded_price}, ${market_prices.best_bid}, 0)
+              COALESCE(latest_prices.last_traded_price, latest_prices.best_bid, 0)
         END`,
         // Debug fields
-        raw_yes_price: market_prices.yes_price,
-        raw_no_price: market_prices.no_price,
-        raw_best_ask: market_prices.best_ask,
-        raw_best_bid: market_prices.best_bid,
-        raw_last_traded: market_prices.last_traded_price,
-        price_timestamp: market_prices.timestamp
+        raw_yes_price: sql`latest_prices.yes_price`,
+        raw_no_price: sql`latest_prices.no_price`,
+        raw_best_ask: sql`latest_prices.best_ask`,
+        raw_best_bid: sql`latest_prices.best_bid`,
+        raw_last_traded: sql`latest_prices.last_traded_price`,
+        price_timestamp: sql`latest_prices.timestamp`
       })
       .from(holdings)
       .leftJoin(markets, eq(holdings.market_id, markets.id))
@@ -65,7 +65,7 @@ export async function GET() {
         eq(holdings.market_id, sql`latest_prices.market_id`)
       )
       .where(eq(holdings.user_id, session.user.sub))
-      .orderBy(desc(market_prices.timestamp));
+      .orderBy(desc(sql`latest_prices.timestamp`));
 
     // Log debugging info
     console.log('Holdings query result:', JSON.stringify(userHoldings, null, 2));
