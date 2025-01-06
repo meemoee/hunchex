@@ -28,24 +28,22 @@ export async function GET() {
         image: markets.image,
         current_price: sql`CASE 
           WHEN UPPER(${holdings.outcome}) = 'YES' THEN
-              COALESCE(latest_prices.yes_price, latest_prices.best_ask, latest_prices.last_traded_price, 0)
+              COALESCE(mp.yes_price, mp.best_ask, mp.last_traded_price, 0)
           WHEN UPPER(${holdings.outcome}) = 'NO' THEN
-              COALESCE(latest_prices.no_price, 1 - latest_prices.best_bid, 1 - latest_prices.last_traded_price, 0)
+              COALESCE(mp.no_price, 1 - mp.best_bid, 1 - mp.last_traded_price, 0)
           ELSE
-              COALESCE(latest_prices.last_traded_price, latest_prices.best_bid, 0)
+              COALESCE(mp.last_traded_price, mp.best_bid, 0)
         END`,
         // Debug fields
-        raw_yes_price: sql`latest_prices.yes_price`,
-        raw_no_price: sql`latest_prices.no_price`,
-        raw_best_ask: sql`latest_prices.best_ask`,
-        raw_best_bid: sql`latest_prices.best_bid`,
-        raw_last_traded: sql`latest_prices.last_traded_price`,
-        price_timestamp: sql`latest_prices.timestamp`
+        raw_yes_price: sql`mp.yes_price`,
+        raw_no_price: sql`mp.no_price`,
+        raw_best_ask: sql`mp.best_ask`,
+        raw_best_bid: sql`mp.best_bid`,
+        raw_last_traded: sql`mp.last_traded_price`,
+        price_timestamp: sql`mp.timestamp`
       })
-      .from(holdings)
-      .leftJoin(markets, eq(holdings.market_id, markets.id))
-      .leftJoin(
-        sql`LATERAL (
+      .from(sql`${holdings} h, ${markets} m,
+        LATERAL (
           SELECT 
             market_id,
             yes_price,
@@ -55,15 +53,16 @@ export async function GET() {
             last_traded_price,
             timestamp
           FROM ${market_prices}
-          WHERE ${market_prices.market_id} = ${holdings.market_id}
-          AND ${market_prices.timestamp} >= NOW() - INTERVAL '24 hours'
-          ORDER BY ${market_prices.timestamp} DESC
+          WHERE market_id = h.market_id
+          AND timestamp >= NOW() - INTERVAL '24 hours'
+          ORDER BY timestamp DESC
           LIMIT 1
-        ) latest_prices ON true`,
-        undefined
-      )
-      .where(eq(holdings.user_id, session.user.sub))
-      .orderBy(desc(sql`latest_prices.timestamp`));
+        ) mp`)
+      .where(and(
+        sql`h.market_id = m.id`,
+        eq(sql`h.user_id`, session.user.sub)
+      ))
+      .orderBy(desc(sql`mp.timestamp`));
 
     // Log debugging info
     console.log('Holdings query result:', JSON.stringify(userHoldings, null, 2));
