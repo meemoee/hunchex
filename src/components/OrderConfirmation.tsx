@@ -223,7 +223,7 @@ export function OrderConfirmation({
     if (localOrderbook?.data) {
       updateOrderType(price)
     }
-  }, [price, localOrderbook?.data, action])
+  }, [price, localOrderbook?.data ?? null, action])
 
   const orderbookRef = useRef<HTMLDivElement>(null)
   const previousScrollPosition = useRef(0)
