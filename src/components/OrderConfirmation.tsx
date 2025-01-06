@@ -221,7 +221,7 @@ export function OrderConfirmation({
   // Update order type whenever price changes
   useEffect(() => {
     updateOrderType(price)
-  }, [price, orderbook, action])
+  }, [price, localOrderbook, action])
 
   const orderbookRef = useRef<HTMLDivElement>(null)
   const previousScrollPosition = useRef(0)
@@ -234,7 +234,7 @@ export function OrderConfirmation({
 
   const centerSpread = (): boolean => {
     const container = orderbookRef.current
-    if (!container || !orderbook) return false
+    if (!container || !localOrderbook) return false
 
     const content = container.querySelector('.orderbook-content')
     if (!content) return false
