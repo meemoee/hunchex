@@ -88,7 +88,7 @@ const {
 
 const polyOrderbook = new PolyOrderbook();
 const sql = neon(process.env.DATABASE_URL);
-const orderManager = new OrderManager(sql, redis, polyOrderbook);
+const orderManager = new OrderManager(sql, redis, polyOrderbook, broadcastToUser);
 
 // Auth0 configuration
 const checkJwt = auth({

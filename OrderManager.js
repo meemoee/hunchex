@@ -46,16 +46,18 @@ class OrderBook {
 }
 
 class OrderManager {
-    constructor(sql, redis, polyOrderbook) {
+    constructor(sql, redis, polyOrderbook, broadcast) {
         console.log('OrderManager initialization:', {
             hasSql: !!sql,
             hasRedis: !!redis,
-            hasPolyOrderbook: !!polyOrderbook
+            hasPolyOrderbook: !!polyOrderbook,
+            hasBroadcast: !!broadcast
         });
         
         this.sql = sql;
         this.redis = redis;
         this.polyOrderbook = polyOrderbook;
+        this.broadcastToUser = broadcast;
 
         if (!process.env.AUTH0_AUDIENCE || !process.env.AUTH0_ISSUER_BASE_URL) {
             throw new Error('Missing required Auth0 configuration');
