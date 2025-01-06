@@ -546,6 +546,14 @@ app.post('/api/submit-order', async (req, res) => {
     }
 
     console.log('9. Order result:', result);
+    console.log('Debug (dataServer): About to invalidate holdings cache for userId =', userId);
+
+    // Invalidate holdings cache before broadcasting
+    const cacheKey = `holdings:${userId}`;
+    console.log('Debug (dataServer): Invalidating cache key:', cacheKey);
+    await redis.del(cacheKey);
+    console.log('Debug (dataServer): Cache invalidated successfully');
+
     console.log('Debug (dataServer): About to broadcast order_execution with userId =', userId);
       
     // First broadcast order execution update

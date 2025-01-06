@@ -295,9 +295,6 @@ class OrderManager {
                 RETURNING id
             `;
             
-            // Invalidate holdings cache before commit
-            await this.redis.del('holdings_cache:' + userId);
-            
             await this.sql`COMMIT`;
             
             return {
