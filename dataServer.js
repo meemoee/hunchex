@@ -547,8 +547,8 @@ app.post('/api/submit-order', async (req, res) => {
 
     console.log('9. Order result:', result);
     console.log('Debug (dataServer): About to broadcast order_execution with userId =', userId);
-    
-    // Broadcast order execution update to user
+      
+    // First broadcast order execution update
     console.log('Debug (dataServer): broadcastToUser triggered for userId:', userId, 'Event data:', { 
       type: 'order_execution', 
       needsHoldingsRefresh: true,
@@ -562,6 +562,16 @@ app.post('/api/submit-order', async (req, res) => {
       timestamp: new Date().toISOString(),
       orderId: result.orderId,
       orderType: req.body.price ? 'limit' : 'market'
+    });
+
+    // Add a small delay to ensure DB transaction is fully committed
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Second broadcast specifically for orders update
+    console.log('Debug (dataServer): Broadcasting orders_update after DB commit');
+    broadcastToUser(userId, {
+      type: 'orders_update',
+      timestamp: new Date().toISOString()
     });
 
     res.json(result);
