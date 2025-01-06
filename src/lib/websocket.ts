@@ -39,6 +39,7 @@ export function useWebSocket() {
     if (!socket) return;
 
     socket.onmessage = (event) => {
+      console.log('Debug (websocket.ts): Incoming raw message', event.data);
       const data = JSON.parse(event.data);
       switch (data.type) {
         case 'holdings_update':

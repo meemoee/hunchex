@@ -163,6 +163,7 @@ export function OrderConfirmation({
 
       const result = await response.json();
       console.log('Order submission successful:', result);
+      console.log('Debug (OrderConfirmation): handleSubmitOrder success, about to call onRefreshUserData()');
       
       setOrderStatus({
         type: 'success',
@@ -172,10 +173,12 @@ export function OrderConfirmation({
       // Handle immediate execution for market orders
       if (result.needsHoldingsRefresh || orderType === 'market') {
         console.log('Refreshing user data after market order');
+        console.log('Debug (OrderConfirmation): Triggering onRefreshUserData now');
         await onRefreshUserData();
       }
 
       onOrderSuccess();
+      console.log('Debug (OrderConfirmation): onOrderSuccess() was just called');
 
     } catch (error) {
       console.error('Error submitting order:', error);

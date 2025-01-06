@@ -128,6 +128,7 @@ export default function MoversListPage() {
 
   const fetchHoldings = async (options = { forceRefresh: false }) => {
     if (!user) return false;
+    console.log('Debug (MoversListPage): fetchHoldings called');
     try {
       console.log('\n=== FETCHING HOLDINGS ===');
       console.log('Options:', options);
@@ -210,6 +211,7 @@ export default function MoversListPage() {
     if (!socket || !isConnected) return
 
     subscribeToUpdates((type, data) => {
+      console.log('Debug (MoversListPage): Received WS event', type, data);
       switch (type) {
         case 'holdings_update':
           console.log('Holdings update received, refreshing...');
@@ -230,6 +232,7 @@ export default function MoversListPage() {
           break
         case 'order_execution':
           console.log('Order execution update received:', data);
+          console.log('Debug (MoversListPage): About to re-fetch user data due to order_execution');
           if (data.needsHoldingsRefresh) {
             console.log('Immediate holdings refresh required');
             Promise.all([
