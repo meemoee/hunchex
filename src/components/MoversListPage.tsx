@@ -89,6 +89,7 @@ export default function MoversListPage() {
 
   const fetchActiveOrders = async () => {
     if (!user) return false
+    console.log('Debug (MoversListPage): fetchActiveOrders called')
     try {
       const response = await fetch('/api/active-orders')
       if (response.ok) {
