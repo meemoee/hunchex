@@ -551,14 +551,14 @@ app.post('/api/submit-order', async (req, res) => {
     // Broadcast order execution update to user
     console.log('Debug (dataServer): broadcastToUser triggered for userId:', userId, 'Event data:', { 
       type: 'order_execution', 
-      needsHoldingsRefresh: !req.body.price,
+      needsHoldingsRefresh: true,
       timestamp: new Date().toISOString(),
       orderId: result.orderId,
       orderType: req.body.price ? 'limit' : 'market'
     });
     broadcastToUser(userId, {
       type: 'order_execution',
-      needsHoldingsRefresh: !req.body.price, // true for market orders
+      needsHoldingsRefresh: true, // Always refresh for both market and limit orders
       timestamp: new Date().toISOString(),
       orderId: result.orderId,
       orderType: req.body.price ? 'limit' : 'market'
