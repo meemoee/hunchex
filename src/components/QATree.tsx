@@ -155,27 +155,46 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
 
   // Fetch saved QA trees
   const fetchSavedTrees = useCallback(async () => {
+    console.log('Fetching saved QA trees...')
     setIsLoading(true)
     try {
       const token = localStorage.getItem('token')
       const userId = localStorage.getItem('userId')
+      
+      if (!token || !userId) {
+        console.error('Missing authentication credentials')
+        toast.error('Authentication required')
+        return
+      }
+
+      console.log('Making API request to fetch trees...')
       const response = await fetch('http://localhost:3001/api/qa-trees', {
+        method: 'GET',
         headers: { 
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
-          'x-user-id': userId || ''
+          'x-user-id': userId,
+          'Accept': 'application/json'
         }
       })
 
-      if (response.ok) {
-        const trees = await response.json()
-        setSavedTrees(trees)
+      const data = await response.json()
+
+      if (!response.ok) {
+        console.error('Failed to fetch trees:', data.error || response.statusText)
+        toast.error(data.error || 'Failed to fetch saved trees')
+        return
       }
+
+      console.log(`Successfully fetched ${data.length} trees`)
+      setSavedTrees(data)
     } catch (error) {
-      console.error('Error fetching saved QA trees:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      console.error('Error fetching saved QA trees:', errorMessage)
       toast.error('Failed to fetch saved trees')
     } finally {
       setIsLoading(false)
+      console.log('Finished fetching trees')
     }
   }, [])
 
