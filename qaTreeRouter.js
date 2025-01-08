@@ -8,6 +8,7 @@ const sql = neon(process.env.DATABASE_URL);
 router.get('/qa-trees', async (req, res) => {
     const startTime = Date.now();
     console.log(`[${new Date().toISOString()}] GET /qa-trees - Request received`);
+    console.log(`[${new Date().toISOString()}] Request headers:`, JSON.stringify(req.headers, null, 2));
     
     try {
         const auth0Id = req.headers['x-user-id'];
@@ -20,6 +21,7 @@ router.get('/qa-trees', async (req, res) => {
 
         console.log(`[${new Date().toISOString()}] Executing SQL query for user:`, auth0Id);
         const queryStartTime = Date.now();
+        console.log(`[${new Date().toISOString()}] Starting SQL query for user ${auth0Id}`);
         
         const trees = await sql`
             SELECT id, market_id, tree_data, title, created_at, updated_at 
@@ -31,6 +33,16 @@ router.get('/qa-trees', async (req, res) => {
         const queryDuration = Date.now() - queryStartTime;
         console.log(`[${new Date().toISOString()}] SQL query completed in ${queryDuration}ms`);
         console.log(`[${new Date().toISOString()}] Found ${trees.length} trees for user`);
+        
+        if (trees.length > 0) {
+            console.log(`[${new Date().toISOString()}] First tree details:`, {
+                id: trees[0].id,
+                marketId: trees[0].market_id,
+                title: trees[0].title,
+                created: trees[0].created_at,
+                updated: trees[0].updated_at
+            });
+        }
         
         const totalDuration = Date.now() - startTime;
         console.log(`[${new Date().toISOString()}] Sending response - Total duration: ${totalDuration}ms`);
