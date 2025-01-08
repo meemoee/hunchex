@@ -227,7 +227,7 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
       console.log('Fetch operation completed at:', new Date().toISOString())
       console.groupEnd()
     }
-  }, [])
+  }, [marketId])
 
   // Load a specific saved tree
   const loadSavedTree = useCallback(async (treeId: string) => {
