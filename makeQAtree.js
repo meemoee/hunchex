@@ -4,6 +4,15 @@ const readline = require('readline');
 const { neon } = require('@neondatabase/serverless');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
+const jwt = require('jsonwebtoken');
+const { auth } = require('express-oauth2-jwt-bearer');
+
+// Auth0 configuration
+const checkJwt = auth({
+  audience: process.env.AUTH0_AUDIENCE,
+  issuerBaseURL: process.env.AUTH0_ISSUER_BASE_URL,
+  tokenSigningAlg: 'RS256'
+});
 
 // Logger setup
 const logger = {
@@ -273,7 +282,7 @@ async function generateOpenrouterResponse(prompt, model = "perplexity/llama-3.1-
   }
 }
 
-async function saveQaTree(sql, userId, marketId, treeData) {
+async function saveQaTree(sql, auth0UserId, marketId, treeData) {
   try {
     await sql`BEGIN`;
     
@@ -383,15 +392,20 @@ async function main() {
   const question = (prompt) => new Promise((resolve) => rl.question(prompt, resolve));
 
   try {
-    const marketId = await question('Enter market ID: ');
-
-    let userId;
-    while (true) {
-      const userIdInput = await question('Enter user ID: ');
-      userId = parseInt(userIdInput);
-      if (!isNaN(userId)) break;
-      console.log('Please enter a valid number for user ID.');
+    // Get Auth0 token from environment or command line
+    const token = process.env.AUTH0_TOKEN || await question('Enter Auth0 token: ');
+    if (!token) {
+      throw new Error('Auth0 token is required');
     }
+
+    // Verify token and get user ID
+    const decoded = jwt.verify(token, process.env.AUTH0_PUBLIC_KEY);
+    const userId = decoded.sub;
+    if (!userId) {
+      throw new Error('Invalid Auth0 token - no user ID found');
+    }
+
+    const marketId = await question('Enter market ID: ');
 
     let maxDepth = 2;
     const depthInput = await question('Enter maximum depth for the QA tree (default 2): ');
