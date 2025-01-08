@@ -3,6 +3,7 @@ const express = require('express');
 const { auth } = require('express-oauth2-jwt-bearer');
 const router = express.Router();
 const { neon } = require('@neondatabase/serverless');
+const { logger, authLoggingMiddleware } = require('./authLogger');
 const sql = neon(process.env.DATABASE_URL);
 
 // Auth0 JWT validation middleware
@@ -12,22 +13,34 @@ const checkJwt = auth({
   tokenSigningAlg: 'RS256'
 });
 
-// Apply JWT check middleware to all routes
+// Error handling for Auth0 middleware
+const handleAuth0Errors = (err, req, res, next) => {
+  logger.error('Auth0 Error:', err);
+  if (err.name === 'UnauthorizedError') {
+    return res.status(401).json({ 
+      error: 'Invalid token',
+      details: err.message 
+    });
+  }
+  next(err);
+};
+
+// Apply JWT check middleware and logging to all routes
 router.use(checkJwt);
+router.use(authLoggingMiddleware);
+router.use(handleAuth0Errors);
 
 // Get all QA trees for a user
 router.get('/qa-trees', async (req, res) => {
     const startTime = Date.now();
-    console.log(`[${new Date().toISOString()}] GET /qa-trees - Request received`);
-    console.log(`[${new Date().toISOString()}] Request headers:`, JSON.stringify(req.headers, null, 2));
+    logger.debug('GET /qa-trees - Request received');
     
     try {
         const auth0Id = req.auth.sub;
-        console.log(`[${new Date().toISOString()}] Auth0 ID from token:`, auth0Id);
+        logger.debug('Processing request for Auth0 ID:', auth0Id);
 
-        console.log(`[${new Date().toISOString()}] Executing SQL query for user:`, auth0Id);
         const queryStartTime = Date.now();
-        console.log(`[${new Date().toISOString()}] Starting SQL query for user ${auth0Id}`);
+        logger.debug('Starting SQL query for user', auth0Id);
         
         const trees = await sql`
             SELECT id, market_id, tree_data, title, created_at, updated_at 
@@ -54,8 +67,11 @@ router.get('/qa-trees', async (req, res) => {
         console.log(`[${new Date().toISOString()}] Sending response - Total duration: ${totalDuration}ms`);
         res.json(trees);
     } catch (error) {
-        console.error('Error fetching QA trees:', error);
-        res.status(500).json({ error: 'Internal Server Error' });
+        logger.error('Error fetching QA trees:', error);
+        res.status(500).json({ 
+            error: 'Internal Server Error',
+            requestId: Date.now().toString(36)
+        });
     }
 });
 
