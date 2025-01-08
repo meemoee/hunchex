@@ -33,18 +33,24 @@ router.use(handleAuth0Errors);
 // Get all QA trees for a user
 router.get('/qa-trees', async (req, res) => {
     const startTime = Date.now();
-    logger.debug('GET /qa-trees - Request received');
+    logger.debug('GET /qa-trees - Request received', {
+        headers: req.headers,
+        query: req.query,
+        params: req.params,
+        url: req.originalUrl,
+        method: req.method,
+        path: req.path
+    });
     
     try {
         const auth0Id = req.auth.sub;
         const marketId = req.query.marketId;
 
-        logger.debug('Received request parameters:', {
-            marketId: req.query.marketId,
-            queryParams: req.query,
-            url: req.originalUrl,
-            method: req.method
-        });
+        if (!marketId) {
+            logger.debug('No marketId provided, returning all trees');
+        } else {
+            logger.debug('Filtering trees by marketId:', marketId);
+        }
         
         logger.debug('Authentication details:', {
             auth: JSON.stringify(req.auth, null, 2),
