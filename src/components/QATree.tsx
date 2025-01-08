@@ -158,10 +158,12 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
     setIsLoading(true)
     try {
       const token = localStorage.getItem('token')
+      const userId = localStorage.getItem('userId')
       const response = await fetch('http://localhost:3001/api/qa-trees', {
         headers: { 
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'x-user-id': userId || ''
         }
       })
 
