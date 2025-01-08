@@ -13,14 +13,11 @@ const PolymarketStream = require('./polymarketStream');
 const KalshiStream = require('./kalshiStream');
 const axios = require('axios');
 const { OpenAI } = require('openai');
-const { auth, validateAccessToken } = require('express-oauth2-jwt-bearer');
+const { auth } = require('express-oauth2-jwt-bearer');
 const { v4: uuidv4 } = require('uuid');
 const fetch = require('node-fetch');
-
-// Connection tracking with authentication state
-const clients = new Map(); // Map of clientId to {ws, userId, authenticated}
+const clients = new Map(); // Map of clientId to WebSocket
 const userSockets = new Map(); // Map of userId to Set of WebSocket connections
-const CONNECTION_TIMEOUT = 30000; // 30 seconds for initial auth
 
 function addUserSocket(userId, ws) {
   if (!userSockets.has(userId)) {
@@ -2629,19 +2626,13 @@ wss.on('connection', (ws) => {
   console.log('WebSocket Connection Established', new Date().toISOString());
   
   const clientId = uuidv4();
-  clients.set(clientId, { ws, authenticated: false });
+  clients.set(clientId, ws);
   
   // Track active streams for this connection
   const activeStreams = new Map();
   
-  // Set authentication timeout
-  const authTimeout = setTimeout(() => {
-    if (clients.get(clientId)?.authenticated === false) {
-      console.log('Client failed to authenticate in time:', clientId);
-      ws.close(4001, 'Authentication timeout');
-      clients.delete(clientId);
-    }
-  }, CONNECTION_TIMEOUT);
+  // Store userId if provided in connection
+  let userId = null;
   
   // Send the clientId to the client
   ws.send(JSON.stringify({ 
@@ -2653,54 +2644,20 @@ wss.on('connection', (ws) => {
   ws.on('message', async (message) => {
     try {
       console.log('=== INCOMING WEBSOCKET MESSAGE ===');
+      console.log('Raw Message:', message.toString());
+      
       const data = JSON.parse(message.toString());
+      
+      console.log('Parsed Message:', JSON.stringify(data, null, 2));
       console.log('Message Type:', data.type);
       
-      const client = clients.get(clientId);
-      if (!client) {
-        console.error('Client not found:', clientId);
-        ws.close(4004, 'Invalid client');
-        return;
-      }
-
       if (data.type === 'auth') {
-        if (!data.token) {
-          ws.close(4002, 'No authentication token provided');
-          return;
-        }
-
-        try {
-          // Verify Auth0 token
-          const decodedToken = await validateAccessToken(data.token);
-          const userId = decodedToken.sub;
-          
-          // Update client record
-          clients.set(clientId, { ...client, userId, authenticated: true });
-          addUserSocket(userId, ws);
-          
-          clearTimeout(authTimeout);
-          console.log(`User ${userId} authenticated on WebSocket ${clientId}`);
-          
-          ws.send(JSON.stringify({
-            type: 'auth_success',
-            timestamp: new Date().toISOString()
-          }));
-        } catch (error) {
-          console.error('Token validation failed:', error);
-          ws.close(4003, 'Invalid token');
-          clients.delete(clientId);
-          return;
-        }
-      } else {
-        // Verify authentication for all non-auth messages
-        if (!client.authenticated) {
-          ws.close(4005, 'Not authenticated');
-          return;
-        }
-
-        if (data.type === 'subscribe_orderbook') {
-          console.log('=== ORDERBOOK SUBSCRIPTION REQUEST ===');
-          const { marketId, side } = data;
+        userId = data.userId;
+        addUserSocket(userId, ws);
+        console.log(`User ${userId} authenticated on WebSocket ${clientId}`);
+      } else if (data.type === 'subscribe_orderbook') {
+        console.log('=== ORDERBOOK SUBSCRIPTION REQUEST ===');
+        const { marketId, side } = data;
         
         console.log('Subscription Details:', {
           marketId,
