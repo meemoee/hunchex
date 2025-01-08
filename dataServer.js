@@ -68,7 +68,10 @@ const app = express();
 const port = 3001;
 
 // Add QA Tree routes
-app.use('/api', qaTreeRouter);
+app.use('/api', (req, res, next) => {
+  console.log('Request to QA Tree Router:', req.method, req.url, req.headers);
+  next();
+}, qaTreeRouter);
 
 
 
