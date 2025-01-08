@@ -161,7 +161,9 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
     setIsLoading(true)
     try {
       console.time('API Request Duration')
-      const response = await fetch('/api/qa-trees')
+      const response = await fetch('/api/qa-trees', {
+        credentials: 'include'
+      })
       console.timeEnd('API Request Duration')
 
       console.group('Response Details')
@@ -228,7 +230,9 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
   const loadSavedTree = useCallback(async (treeId: string) => {
     setIsLoading(true)
     try {
-      const response = await fetch(`/api/qa-tree/${treeId}`)
+      const response = await fetch(`/api/qa-tree/${treeId}`, {
+        credentials: 'include'
+      })
 
       if (response.ok) {
         const treeData = await response.json()
@@ -260,6 +264,7 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
     try {
       const response = await fetch('/api/save-qa-tree', {
         method: 'POST',
+        credentials: 'include',
         headers: { 
           'Content-Type': 'application/json'
         },
@@ -285,8 +290,9 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
   const deleteSavedTree = async (treeId: string) => {
     setIsLoading(true)
     try {
-      const response = await fetch(`/api/delete-qa-tree/${treeId}`, {
+      const response = await fetch(`/api/qa-tree/${treeId}`, {
         method: 'DELETE',
+        credentials: 'include',
         headers: { 
           'Content-Type': 'application/json'
         }
@@ -312,6 +318,7 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
     try {
       const response = await fetch(`/api/update-qa-tree-title/${editingTreeTitle.treeId}`, {
         method: 'PATCH',
+        credentials: 'include',
         headers: { 
           'Content-Type': 'application/json'
         },
