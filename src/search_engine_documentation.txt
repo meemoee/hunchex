@@ -1,0 +1,100 @@
+Search Engine Documentation
+==========================
+
+1. Overview
+-----------
+The search engine provides real-time market data querying and order matching functionality, integrated with both SQL and Redis databases for optimal performance.
+
+2. Core Components
+-----------------
+2.1 Order Management System
+    - Handles market and limit orders
+    - Maintains orderbook state
+    - Processes order execution
+    - Validates orders against user balances
+
+2.2 Data Storage
+    - SQL database for persistent storage
+    - Redis cache for high-performance data access
+    - Polyorderbook integration for order matching
+
+2.3 Real-time Updates
+    - WebSocket broadcasting system
+    - User-specific notifications
+    - Market data streaming
+    - Balance and holdings updates
+
+3. API Endpoints
+---------------
+3.1 Market Data
+    - /api/top_movers: Returns most active markets
+    - /api/balance: User balance information
+    - /api/chat: Real-time market query interface
+
+3.2 Order Operations
+    - Market order execution
+    - Limit order placement
+    - Order cancellation
+    - Orderbook snapshot retrieval
+
+4. Data Types
+-------------
+4.1 Orders
+    - Types: market, limit
+    - Sides: buy, sell
+    - Status tracking
+    - Price and size handling
+
+4.2 Market Updates
+    - Holdings updates
+    - Orders updates
+    - Balance updates
+
+5. Performance Considerations
+---------------------------
+5.1 Caching Strategy
+    - Redis for frequent queries
+    - Database optimization
+    - Connection pooling
+
+5.2 Real-time Processing
+    - Websocket management
+    - Stream processing
+    - Event-driven updates
+
+6. Security
+-----------
+6.1 Access Control
+    - API authentication
+    - User validation
+    - Order verification
+
+6.2 Data Protection
+    - CORS policies
+    - Request validation
+    - Error handling
+
+7. Integration Points
+--------------------
+7.1 Frontend
+    - React/Next.js components
+    - Real-time updates
+    - Order confirmation flow
+
+7.2 Backend Services
+    - Database services
+    - Cache management
+    - Order matching engine
+
+8. Error Handling
+----------------
+8.1 Common Scenarios
+    - Invalid queries
+    - Insufficient balance
+    - Network issues
+    - Database connectivity
+
+8.2 Recovery Procedures
+    - Transaction rollback
+    - Connection retry
+    - Error logging
