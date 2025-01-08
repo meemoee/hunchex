@@ -1,6 +1,9 @@
+require('dotenv').config();
 const { neon } = require('@neondatabase/serverless');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
+
+const sql = neon(process.env.DATABASE_URL);
 
 // Logger setup
 const logger = {
