@@ -198,12 +198,12 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
         'Accept': 'application/json'
       }
       
-      console.log('Request URL:', 'http://localhost:3001/api/qa-trees')
+      console.log('Request URL:', '/api/qa-trees')
       console.log('Request Method:', 'GET')
       console.table(requestHeaders)
 
       console.time('API Request Duration')
-      const response = await fetch('http://localhost:3001/api/qa-trees', {
+      const response = await fetch('/api/qa-trees', {
         method: 'GET',
         headers: requestHeaders
       })
@@ -274,7 +274,7 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
     setIsLoading(true)
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch(`http://localhost:3001/api/qa-tree/${treeId}`, {
+      const response = await fetch(`/api/qa-tree/${treeId}`, {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -310,7 +310,7 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
     setIsLoading(true)
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch('http://localhost:3001/api/save-qa-tree', {
+      const response = await fetch('/api/save-qa-tree', {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -339,7 +339,7 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
     setIsLoading(true)
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch(`http://localhost:3001/api/delete-qa-tree/${treeId}`, {
+      const response = await fetch(`/api/delete-qa-tree/${treeId}`, {
         method: 'DELETE',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -366,7 +366,7 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
     setIsLoading(true)
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch(`http://localhost:3001/api/update-qa-tree-title/${editingTreeTitle.treeId}`, {
+      const response = await fetch(`/api/update-qa-tree-title/${editingTreeTitle.treeId}`, {
         method: 'PATCH',
         headers: { 
           'Authorization': `Bearer ${token}`,
