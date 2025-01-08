@@ -1,8 +1,19 @@
 // qaTreeRouter.js
 const express = require('express');
+const { auth } = require('express-oauth2-jwt-bearer');
 const router = express.Router();
 const { neon } = require('@neondatabase/serverless');
 const sql = neon(process.env.DATABASE_URL);
+
+// Auth0 JWT validation middleware
+const checkJwt = auth({
+  audience: process.env.AUTH0_AUDIENCE,
+  issuerBaseURL: process.env.AUTH0_ISSUER,
+  tokenSigningAlg: 'RS256'
+});
+
+// Apply JWT check middleware to all routes
+router.use(checkJwt);
 
 // Get all QA trees for a user
 router.get('/qa-trees', async (req, res) => {
@@ -11,13 +22,8 @@ router.get('/qa-trees', async (req, res) => {
     console.log(`[${new Date().toISOString()}] Request headers:`, JSON.stringify(req.headers, null, 2));
     
     try {
-        const auth0Id = req.headers['x-user-id'];
-        console.log(`[${new Date().toISOString()}] Auth0 ID from header:`, auth0Id);
-        
-        if (!auth0Id) {
-            console.log(`[${new Date().toISOString()}] Request rejected - No Auth0 ID provided`);
-            return res.status(401).json({ error: 'Unauthorized - User ID required' });
-        }
+        const auth0Id = req.auth.sub;
+        console.log(`[${new Date().toISOString()}] Auth0 ID from token:`, auth0Id);
 
         console.log(`[${new Date().toISOString()}] Executing SQL query for user:`, auth0Id);
         const queryStartTime = Date.now();
@@ -56,10 +62,7 @@ router.get('/qa-trees', async (req, res) => {
 // Get a specific QA tree
 router.get('/qa-trees/:id', async (req, res) => {
     try {
-        const auth0Id = req.headers['x-user-id'];
-        if (!auth0Id) {
-            return res.status(401).json({ error: 'Unauthorized - User ID required' });
-        }
+        const auth0Id = req.auth.sub;
 
         const { id } = req.params;
         const trees = await sql`
@@ -82,10 +85,7 @@ router.get('/qa-trees/:id', async (req, res) => {
 // Save a new QA tree
 router.post('/qa-trees', async (req, res) => {
     try {
-        const auth0Id = req.headers['x-user-id'];
-        if (!auth0Id) {
-            return res.status(401).json({ error: 'Unauthorized - User ID required' });
-        }
+        const auth0Id = req.auth.sub;
 
         const { marketId, treeData, title } = req.body;
         if (!marketId || !treeData) {
@@ -108,10 +108,7 @@ router.post('/qa-trees', async (req, res) => {
 // Update a QA tree
 router.put('/qa-trees/:id', async (req, res) => {
     try {
-        const auth0Id = req.headers['x-user-id'];
-        if (!auth0Id) {
-            return res.status(401).json({ error: 'Unauthorized - User ID required' });
-        }
+        const auth0Id = req.auth.sub;
 
         const { id } = req.params;
         const { treeData, title } = req.body;
@@ -142,10 +139,7 @@ router.put('/qa-trees/:id', async (req, res) => {
 // Delete a QA tree
 router.delete('/qa-trees/:id', async (req, res) => {
     try {
-        const auth0Id = req.headers['x-user-id'];
-        if (!auth0Id) {
-            return res.status(401).json({ error: 'Unauthorized - User ID required' });
-        }
+        const auth0Id = req.auth.sub;
 
         const { id } = req.params;
         const result = await sql`
