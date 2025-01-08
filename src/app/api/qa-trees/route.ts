@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     
     // Query to get all QA trees for the user
     const trees = await db.query(
-      'SELECT id, market_id, tree_data, title, created_at, updated_at FROM qa_trees WHERE user_id = $1 ORDER BY updated_at DESC',
+      'SELECT id, market_id, tree_data, title, created_at, updated_at FROM qa_trees WHERE auth0_id = $1 ORDER BY updated_at DESC',
       [userId]
     );
 
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
 
     // Save the QA tree
     const result = await db.query(
-      'INSERT INTO qa_trees (user_id, market_id, tree_data, title) VALUES ($1, $2, $3, $4) RETURNING id',
+      'INSERT INTO qa_trees (auth0_id, market_id, tree_data, title) VALUES ($1, $2, $3, $4) RETURNING id',
       [userId, marketId, treeData, title]
     );
 
@@ -71,7 +71,7 @@ export async function PUT(request: Request) {
 
     // Update the QA tree
     const result = await db.query(
-      'UPDATE qa_trees SET tree_data = $1, title = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 AND user_id = $4 RETURNING id',
+      'UPDATE qa_trees SET tree_data = $1, title = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 AND auth0_id = $4 RETURNING id',
       [treeData, title, id, userId]
     );
 
@@ -104,7 +104,7 @@ export async function DELETE(request: Request) {
 
     // Delete the QA tree
     const result = await db.query(
-      'DELETE FROM qa_trees WHERE id = $1 AND user_id = $2 RETURNING id',
+      'DELETE FROM qa_trees WHERE id = $1 AND auth0_id = $2 RETURNING id',
       [id, userId]
     );
 
