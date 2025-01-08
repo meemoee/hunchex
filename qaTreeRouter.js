@@ -38,6 +38,13 @@ router.get('/qa-trees', async (req, res) => {
     try {
         const auth0Id = req.auth.sub;
         const marketId = req.query.marketId;
+
+        logger.debug('Received request parameters:', {
+            marketId: req.query.marketId,
+            queryParams: req.query,
+            url: req.originalUrl,
+            method: req.method
+        });
         
         logger.debug('Authentication details:', {
             auth: JSON.stringify(req.auth, null, 2),
@@ -52,7 +59,11 @@ router.get('/qa-trees', async (req, res) => {
             auth0Id,
             marketId,
             timestamp: new Date().toISOString(),
-            queryStartTime
+            queryStartTime,
+            sqlFilters: {
+                auth0_id: auth0Id,
+                marketId: marketId || 'no filter'
+            }
         });
         
         const trees = await sql`
