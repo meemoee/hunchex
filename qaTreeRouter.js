@@ -46,6 +46,15 @@ router.get('/qa-trees', async (req, res) => {
         const auth0Id = req.auth.sub;
         const marketId = req.query.marketId;
 
+        logger.debug('MarketId debug info:', {
+            rawMarketId: req.query.marketId,
+            trimmedMarketId: marketId?.trim(),
+            typeof: typeof marketId,
+            isEmpty: marketId === '',
+            isNull: marketId === null,
+            isUndefined: marketId === undefined
+        });
+
         if (!marketId) {
             logger.debug('No marketId provided, returning all trees');
         } else {
@@ -78,6 +87,10 @@ router.get('/qa-trees', async (req, res) => {
         if (marketId && marketId.trim()) {
             conditions.push(sql`market_id = ${marketId.trim()}`);
         }
+
+        logger.debug('SQL conditions:', {
+            conditions: conditions.map(c => c.sql())
+        });
 
         const queryString = sql`
             SELECT id, market_id, tree_data, title, created_at, updated_at 
