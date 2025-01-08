@@ -163,6 +163,10 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
     
     setIsLoading(true)
     try {
+      console.log('DEBUG: Market ID =', marketId);
+      console.log('DEBUG: Full fetch URL =', '/api/qa-trees?marketId=' + marketId);
+      console.log('DEBUG: Options =', {credentials: 'include'});
+      
       console.time('API Request Duration')
       const response = await fetch(`/api/qa-trees?marketId=${marketId}`, {
         credentials: 'include'
