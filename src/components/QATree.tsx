@@ -228,35 +228,36 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
 
   // Load a specific saved tree
   const loadSavedTree = useCallback(async (treeId: string) => {
-    setIsLoading(true)
+    console.log('Loading tree:', treeId);
+    setIsLoading(true);
     try {
       const response = await fetch(`/api/qa-tree/${treeId}`, {
         credentials: 'include'
-      })
-
+      });
       if (response.ok) {
-        const treeData = await response.json()
-        
-        // Convert server tree structure to QANode
-        const convertToQANode = (node: any): QANode => ({
-          id: node.id,
-          question: node.question,
-          answer: node.answer,
-          children: node.children?.map(convertToQANode)
-        })
-
-        // Update the tree with loaded data
-        setQAData([convertToQANode(treeData)])
-        setSelectedSavedTree(treeId)
-        toast.success('Tree loaded successfully')
+        const tree = await response.json();
+        console.log('Loaded tree:', tree);
+        if (tree.tree_data) {
+          // tree_data is already in QANode format
+          setQAData([tree.tree_data]);
+          setSelectedSavedTree(treeId);
+          toast.success('Tree loaded successfully');
+        } else {
+          console.error('Invalid tree data:', tree);
+          toast.error('Invalid tree data received');
+        }
+      } else {
+        const error = await response.json();
+        console.error('Failed to load tree:', error);
+        toast.error(error.error || 'Failed to load tree');
       }
     } catch (error) {
-      console.error('Error loading saved QA tree:', error)
-      toast.error('Failed to load tree')
+      console.error('Error loading tree:', error);
+      toast.error('Failed to load tree');
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [])
+  }, []);
 
   // Save current tree
   const saveCurrentTree = async () => {
