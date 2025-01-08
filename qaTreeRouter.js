@@ -72,17 +72,25 @@ router.get('/qa-trees', async (req, res) => {
             }
         });
         
-        logger.debug('Running SQL query:', { 
-            sqlString: await sql`SELECT * FROM qa_trees WHERE auth0_id = ${auth0Id} ${marketId ? sql`AND market_id = ${marketId}` : sql``}`.sql()
-        });
+        const conditions = [];
+        conditions.push(sql`auth0_id = ${auth0Id}`);
         
-        const trees = await sql`
+        if (marketId && marketId.trim()) {
+            conditions.push(sql`market_id = ${marketId.trim()}`);
+        }
+
+        const queryString = sql`
             SELECT id, market_id, tree_data, title, created_at, updated_at 
             FROM qa_trees 
-            WHERE auth0_id = ${auth0Id}
-            ${marketId ? sql`AND market_id = ${marketId}` : sql``}
+            WHERE ${sql.join(conditions, sql` AND `)}
             ORDER BY updated_at DESC
         `;
+        
+        logger.debug('Running SQL query:', { 
+            sqlString: await queryString.sql()
+        });
+        
+        const trees = await queryString;
         
         const queryDuration = Date.now() - queryStartTime;
         logger.debug('SQL query completed', {
