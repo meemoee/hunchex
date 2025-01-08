@@ -158,55 +158,10 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
     console.group('Fetching QA Trees')
     console.log('Starting fetch operation at:', new Date().toISOString())
     
-    // Log all localStorage values
-    console.group('LocalStorage State')
-    const storageKeys = ['token', 'userId', 'lastLogin', 'preferences']
-    storageKeys.forEach(key => {
-      const value = localStorage.getItem(key)
-      console.log(`${key}:`, value ? (key === 'token' ? '**PRESENT**' : value) : 'null')
-    })
-    console.groupEnd()
-
     setIsLoading(true)
     try {
-      const token = localStorage.getItem('token')
-      const userId = localStorage.getItem('userId')
-      
-      console.group('Authentication Check')
-      console.log('Token present:', !!token)
-      console.log('UserID present:', !!userId)
-      
-      if (!token || !userId) {
-        console.error('Authentication failed - Missing credentials')
-        console.table({
-          token: { present: !!token, valid: false },
-          userId: { present: !!userId, valid: false }
-        })
-        toast.error('Authentication required')
-        console.groupEnd()
-        console.groupEnd()
-        return
-      }
-      console.log('Authentication check passed')
-      console.groupEnd()
-
-      console.group('API Request Details')
-      const requestHeaders = {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'x-user-id': userId,
-        'Accept': 'application/json'
-      }
-      
-      console.log('Request URL:', '/api/qa-trees')
-      console.log('Request Method:', 'GET')
-      console.table(requestHeaders)
-
       console.time('API Request Duration')
-      const response = await fetch('/api/qa-trees', {
-        method: 'GET',
-        headers: requestHeaders
-      })
+      const response = await fetch('/api/qa-trees')
       console.timeEnd('API Request Duration')
 
       console.group('Response Details')
@@ -273,13 +228,7 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
   const loadSavedTree = useCallback(async (treeId: string) => {
     setIsLoading(true)
     try {
-      const token = localStorage.getItem('token')
-      const response = await fetch(`/api/qa-tree/${treeId}`, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      })
+      const response = await fetch(`/api/qa-tree/${treeId}`)
 
       if (response.ok) {
         const treeData = await response.json()
@@ -309,11 +258,9 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
   const saveCurrentTree = async () => {
     setIsLoading(true)
     try {
-      const token = localStorage.getItem('token')
       const response = await fetch('/api/save-qa-tree', {
         method: 'POST',
         headers: { 
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -338,11 +285,9 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
   const deleteSavedTree = async (treeId: string) => {
     setIsLoading(true)
     try {
-      const token = localStorage.getItem('token')
       const response = await fetch(`/api/delete-qa-tree/${treeId}`, {
         method: 'DELETE',
         headers: { 
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       })
@@ -365,11 +310,9 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
     
     setIsLoading(true)
     try {
-      const token = localStorage.getItem('token')
       const response = await fetch(`/api/update-qa-tree-title/${editingTreeTitle.treeId}`, {
         method: 'PATCH',
         headers: { 
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
