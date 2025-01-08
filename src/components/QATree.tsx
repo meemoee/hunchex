@@ -161,7 +161,7 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
     setIsLoading(true)
     try {
       console.time('API Request Duration')
-      const response = await fetch('/api/qa-trees', {
+      const response = await fetch(`/api/qa-trees?marketId=${marketId}`, {
         credentials: 'include'
       })
       console.timeEnd('API Request Duration')
