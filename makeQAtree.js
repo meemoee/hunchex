@@ -371,7 +371,7 @@ async function generateQaTree(sql, marketId, userId, maxDepth = 2) {
   }
 
   await populateChildren(treeData);
-  return await saveQaTree(pool, userId, marketId, treeData);
+  return await saveQaTree(sql, userId, marketId, treeData);
 }
 
 async function main() {
