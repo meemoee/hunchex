@@ -155,46 +155,117 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
 
   // Fetch saved QA trees
   const fetchSavedTrees = useCallback(async () => {
-    console.log('Fetching saved QA trees...')
+    console.group('Fetching QA Trees')
+    console.log('Starting fetch operation at:', new Date().toISOString())
+    
+    // Log all localStorage values
+    console.group('LocalStorage State')
+    const storageKeys = ['token', 'userId', 'lastLogin', 'preferences']
+    storageKeys.forEach(key => {
+      const value = localStorage.getItem(key)
+      console.log(`${key}:`, value ? (key === 'token' ? '**PRESENT**' : value) : 'null')
+    })
+    console.groupEnd()
+
     setIsLoading(true)
     try {
       const token = localStorage.getItem('token')
       const userId = localStorage.getItem('userId')
       
+      console.group('Authentication Check')
+      console.log('Token present:', !!token)
+      console.log('UserID present:', !!userId)
+      
       if (!token || !userId) {
-        console.error('Missing authentication credentials')
+        console.error('Authentication failed - Missing credentials')
+        console.table({
+          token: { present: !!token, valid: false },
+          userId: { present: !!userId, valid: false }
+        })
         toast.error('Authentication required')
+        console.groupEnd()
+        console.groupEnd()
         return
       }
+      console.log('Authentication check passed')
+      console.groupEnd()
 
-      console.log('Making API request to fetch trees...')
+      console.group('API Request Details')
+      const requestHeaders = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'x-user-id': userId,
+        'Accept': 'application/json'
+      }
+      
+      console.log('Request URL:', 'http://localhost:3001/api/qa-trees')
+      console.log('Request Method:', 'GET')
+      console.table(requestHeaders)
+
+      console.time('API Request Duration')
       const response = await fetch('http://localhost:3001/api/qa-trees', {
         method: 'GET',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'x-user-id': userId,
-          'Accept': 'application/json'
-        }
+        headers: requestHeaders
       })
+      console.timeEnd('API Request Duration')
 
+      console.group('Response Details')
+      console.log('Status:', response.status)
+      console.log('Status Text:', response.statusText)
+      console.log('Headers:', Object.fromEntries([...response.headers]))
+      
       const data = await response.json()
+      console.log('Response Body:', data)
+      console.groupEnd()
 
       if (!response.ok) {
-        console.error('Failed to fetch trees:', data.error || response.statusText)
+        console.group('Request Failed')
+        console.error('Error Details:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: data.error,
+          timestamp: new Date().toISOString()
+        })
+        console.groupEnd()
         toast.error(data.error || 'Failed to fetch saved trees')
+        console.groupEnd()
         return
       }
 
-      console.log(`Successfully fetched ${data.length} trees`)
+      console.group('Success Details')
+      console.log(`Fetched ${data.length} trees`)
+      console.log('First tree preview:', data[0] ? {
+        id: data[0].tree_id,
+        title: data[0].title,
+        created: data[0].created_at
+      } : 'No trees found')
+      console.groupEnd()
+      
       setSavedTrees(data)
     } catch (error) {
+      console.group('Error Details')
+      if (error instanceof Error) {
+        console.error('Error Name:', error.name)
+        console.error('Error Message:', error.message)
+        console.error('Stack Trace:', error.stack)
+        if (error instanceof TypeError) {
+          console.error('Network Error Details:', {
+            type: 'TypeError',
+            likely_cause: 'Network or CORS issue'
+          })
+        }
+      } else {
+        console.error('Unknown Error Type:', error)
+      }
+      console.groupEnd()
+      
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
-      console.error('Error fetching saved QA trees:', errorMessage)
+      console.error('Final Error Message:', errorMessage)
       toast.error('Failed to fetch saved trees')
     } finally {
       setIsLoading(false)
-      console.log('Finished fetching trees')
+      console.log('Fetch operation completed at:', new Date().toISOString())
+      console.groupEnd()
     }
   }, [])
 
