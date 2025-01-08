@@ -223,7 +223,7 @@ async function addHolding(userId, marketId, position, amount, price) {
     // Add the holding
     await client.query('INSERT INTO holdings (user_id, market_id, position, amount) VALUES ($1, $2, $3, $4)', [userId, marketId, position, amount]);
 
-    await client.query('COMMIT');
+    await sql`COMMIT`;
 
     // Invalidate the holdings cache
     await invalidateHoldingsCache(userId);
@@ -231,10 +231,8 @@ async function addHolding(userId, marketId, position, amount, price) {
     // Update user value history
     await updateUserValueHistory(userId);
   } catch (error) {
-    await client.query('ROLLBACK');
+    await sql`ROLLBACK`;
     throw error;
-  } finally {
-    client.release();
   }
 }
 
@@ -1858,18 +1856,16 @@ app.get('/api/qa-trees', async (req, res) => {
   }
 
   try {
-    const query = `
+    const result = await sql`
       SELECT 
         tree_id, 
         title, 
         description, 
         created_at
       FROM qa_trees 
-      WHERE user_id = $1 
+      WHERE user_id = ${userId}
       ORDER BY created_at DESC
     `;
-    
-    const result = await pool.query(query, [userId]);
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching QA trees:', error);
@@ -1889,7 +1885,7 @@ app.get('/api/qa-tree/:treeId', async (req, res) => {
 
   try {
     // Recursive CTE to fetch the entire tree structure
-    const query = `
+    const result = await sql`
       WITH RECURSIVE tree_nodes AS (
         SELECT 
           node_id, 
@@ -1899,10 +1895,10 @@ app.get('/api/qa-tree/:treeId', async (req, res) => {
           NULL::uuid AS parent_node_id,
           0 AS depth
         FROM qa_nodes 
-        WHERE tree_id = $1 AND node_id NOT IN (
+        WHERE tree_id = ${treeId} AND node_id NOT IN (
           SELECT child_node_id 
           FROM qa_node_relationships 
-          WHERE tree_id = $1
+          WHERE tree_id = ${treeId}
         )
         UNION ALL
         SELECT 
@@ -1915,7 +1911,7 @@ app.get('/api/qa-tree/:treeId', async (req, res) => {
         FROM qa_nodes n
         JOIN qa_node_relationships r ON n.node_id = r.child_node_id
         JOIN tree_nodes tn ON r.parent_node_id = tn.node_id
-        WHERE n.tree_id = $1
+        WHERE n.tree_id = ${treeId}
       )
       SELECT 
         node_id,
@@ -1926,8 +1922,6 @@ app.get('/api/qa-tree/:treeId', async (req, res) => {
       FROM tree_nodes
       ORDER BY depth, node_id
     `;
-    
-    const result = await pool.query(query, [treeId]);
     
     // Reconstruct the tree structure
     const nodeMap = new Map();
@@ -1975,36 +1969,37 @@ app.post('/api/save-qa-tree', async (req, res) => {
 
   const { marketId, treeData } = req.body;
 
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
+    await sql`BEGIN`;
 
     // Insert the tree
-    const treeResult = await client.query(
-      'INSERT INTO qa_trees (user_id, market_id, title, description) VALUES ($1, $2, $3, $4) RETURNING tree_id',
-      [
-        userId, 
-        marketId, 
-        `Analysis Tree for ${marketId}`, 
-        'User-generated QA Tree'
-      ]
-    );
-    const treeId = treeResult.rows[0].tree_id;
+    const treeResult = await sql`
+      INSERT INTO qa_trees (user_id, market_id, title, description) 
+      VALUES (
+        ${userId}, 
+        ${marketId}, 
+        ${`Analysis Tree for ${marketId}`}, 
+        ${'User-generated QA Tree'}
+      ) 
+      RETURNING tree_id
+    `;
+    const treeId = treeResult[0].tree_id;
 
     // Recursive function to insert nodes
     async function insertNode(node, parentNodeId = null) {
-      const nodeResult = await client.query(
-        'INSERT INTO qa_nodes (tree_id, question, answer, created_by) VALUES ($1, $2, $3, $4) RETURNING node_id',
-        [treeId, node.question, node.answer, userId]
-      );
-      const nodeId = nodeResult.rows[0].node_id;
+      const nodeResult = await sql`
+        INSERT INTO qa_nodes (tree_id, question, answer, created_by) 
+        VALUES (${treeId}, ${node.question}, ${node.answer}, ${userId}) 
+        RETURNING node_id
+      `;
+      const nodeId = nodeResult[0].node_id;
 
       // If there's a parent, create the relationship
       if (parentNodeId) {
-        await client.query(
-          'INSERT INTO qa_node_relationships (parent_node_id, child_node_id, tree_id) VALUES ($1, $2, $3)',
-          [parentNodeId, nodeId, treeId]
-        );
+        await sql`
+          INSERT INTO qa_node_relationships (parent_node_id, child_node_id, tree_id) 
+          VALUES (${parentNodeId}, ${nodeId}, ${treeId})
+        `;
       }
 
       // Recursively insert child nodes
@@ -2020,7 +2015,7 @@ app.post('/api/save-qa-tree', async (req, res) => {
     // Start inserting from the root
     await insertNode(treeData[0]);
 
-    await client.query('COMMIT');
+    await sql`COMMIT`;
     res.json({ message: 'QA Tree saved successfully', treeId });
   } catch (error) {
     await client.query('ROLLBACK');
@@ -2041,24 +2036,25 @@ app.delete('/api/delete-qa-tree/:treeId', async (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
+    await sql`BEGIN`;
 
     // Delete node relationships
-    await client.query('DELETE FROM qa_node_relationships WHERE tree_id = $1', [treeId]);
+    await sql`DELETE FROM qa_node_relationships WHERE tree_id = ${treeId}`;
     
     // Delete nodes
-    await client.query('DELETE FROM qa_nodes WHERE tree_id = $1', [treeId]);
+    await sql`DELETE FROM qa_nodes WHERE tree_id = ${treeId}`;
     
     // Delete tree
-    const result = await client.query(
-      'DELETE FROM qa_trees WHERE tree_id = $1 AND user_id = $2 RETURNING *', 
-      [treeId, userId]
-    );
+    const result = await sql`
+      DELETE FROM qa_trees 
+      WHERE tree_id = ${treeId} 
+      AND user_id = ${userId} 
+      RETURNING *
+    `;
 
-    if (result.rows.length === 0) {
-      await client.query('ROLLBACK');
+    if (result.length === 0) {
+      await sql`ROLLBACK`;
       return res.status(404).json({ error: 'Tree not found or unauthorized' });
     }
 
@@ -2085,12 +2081,15 @@ app.patch('/api/update-qa-tree-title/:treeId', async (req, res) => {
   }
 
   try {
-    const result = await pool.query(
-      'UPDATE qa_trees SET title = $1 WHERE tree_id = $2 AND user_id = $3 RETURNING *', 
-      [title, treeId, userId]
-    );
+    const result = await sql`
+      UPDATE qa_trees 
+      SET title = ${title} 
+      WHERE tree_id = ${treeId} 
+      AND user_id = ${userId} 
+      RETURNING *
+    `;
 
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       return res.status(404).json({ error: 'Tree not found or unauthorized' });
     }
 
