@@ -1,18 +1,9 @@
-// First, we'll bring in our dependencies
-require('dotenv').config();
-const readline = require('readline');
+const express = require('express');
+const router = express.Router();
 const { neon } = require('@neondatabase/serverless');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
-const jwt = require('jsonwebtoken');
 const { auth } = require('express-oauth2-jwt-bearer');
-
-// Auth0 configuration
-const checkJwt = auth({
-  audience: process.env.AUTH0_AUDIENCE,
-  issuerBaseURL: process.env.AUTH0_ISSUER_BASE_URL,
-  tokenSigningAlg: 'RS256'
-});
 
 // Logger setup
 const logger = {
@@ -292,7 +283,7 @@ async function saveQaTree(sql, auth0UserId, marketId, treeData) {
       INSERT INTO qa_trees (tree_id, user_id, market_id, title, description)
       VALUES (
         ${treeId},
-        ${userId},
+        ${auth0UserId},
         ${marketId},
         ${`Analysis Tree for ${marketId}`},
         ${"Automatically generated analysis tree"}
@@ -309,7 +300,7 @@ async function saveQaTree(sql, auth0UserId, marketId, treeData) {
           ${treeId},
           ${nodeData.question || ''},
           ${nodeData.answer || ''},
-          ${userId}
+          ${auth0UserId}
         )
       `;
 
@@ -383,54 +374,23 @@ async function generateQaTree(sql, marketId, userId, maxDepth = 2) {
   return await saveQaTree(sql, userId, marketId, treeData);
 }
 
-async function main() {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
+// Express route handler for QA tree generation
+router.post('/generate-qa-tree', auth(), async (req, res) => {
+  const auth0UserId = req.auth.sub;
+  const { marketId, maxDepth = 2 } = req.body;
 
-  const question = (prompt) => new Promise((resolve) => rl.question(prompt, resolve));
+  if (!marketId) {
+    return res.status(400).json({ error: 'Market ID is required' });
+  }
 
   try {
-    // Get Auth0 token from environment or command line
-    const token = process.env.AUTH0_TOKEN || await question('Enter Auth0 token: ');
-    if (!token) {
-      throw new Error('Auth0 token is required');
-    }
-
-    // Verify token and get user ID
-    const decoded = jwt.verify(token, process.env.AUTH0_PUBLIC_KEY);
-    const userId = decoded.sub;
-    if (!userId) {
-      throw new Error('Invalid Auth0 token - no user ID found');
-    }
-
-    const marketId = await question('Enter market ID: ');
-
-    let maxDepth = 2;
-    const depthInput = await question('Enter maximum depth for the QA tree (default 2): ');
-    if (depthInput) {
-      const parsed = parseInt(depthInput);
-      if (!isNaN(parsed)) {
-        maxDepth = parsed;
-      }
-    }
-
     const sql = neon(process.env.DATABASE_URL);
-
-    const treeId = await generateQaTree(sql, marketId, userId, maxDepth);
-    console.log(`\nSuccessfully generated QA tree with ID: ${treeId}`);
+    const treeId = await generateQaTree(sql, marketId, auth0UserId, maxDepth);
+    res.json({ treeId });
   } catch (error) {
-    console.error('Error:', error);
-  } finally {
-    rl.close();
+    console.error('Error generating QA tree:', error);
+    res.status(500).json({ error: 'Failed to generate QA tree', details: error.message });
   }
-}
+});
 
-// Run the main function if this is the main module
-if (require.main === module) {
-  main().catch(error => {
-    console.error('Fatal error:', error);
-    process.exit(1);
-  });
-}
+module.exports = router;
