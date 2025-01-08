@@ -179,7 +179,7 @@ async function authenticateKalshiElections() {
 const CACHE_UPDATE_INTERVAL = 5 * 60 * 1000;
 const UNIQUE_TICKERS_UPDATE_INTERVAL = 15 * 60 * 1000;
 
-// Enhanced CORS configuration
+// Enhanced CORS configuration with QA tree support
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
     ? [process.env.FRONTEND_URL, process.env.API_URL].filter(Boolean)
@@ -193,13 +193,36 @@ app.use(cors({
     'x-requested-with',
     'x-client-id',
     'x-access-token',
+    'x-tree-id',
+    'x-node-id',
+    'x-parent-id',
     'accept',
     'origin',
-    'cache-control'
+    'cache-control',
+    'if-match',
+    'if-none-match'
   ],
-  exposedHeaders: ['Content-Length', 'Content-Range', 'X-Total-Count'],
-  maxAge: 600 // Cache preflight requests for 10 minutes
+  exposedHeaders: [
+    'Content-Length', 
+    'Content-Range', 
+    'X-Total-Count',
+    'ETag',
+    'Last-Modified',
+    'X-Tree-Version',
+    'X-Node-Count'
+  ],
+  maxAge: 600, // Cache preflight requests for 10 minutes
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
+
+// Additional headers for QA tree endpoints
+app.use('/api/qa-tree*', (req, res, next) => {
+  res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
 
 app.options('*', (req, res) => {
   const origin = process.env.NODE_ENV === 'production'
