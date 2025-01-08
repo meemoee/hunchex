@@ -179,13 +179,31 @@ async function authenticateKalshiElections() {
 const CACHE_UPDATE_INTERVAL = 5 * 60 * 1000;
 const UNIQUE_TICKERS_UPDATE_INTERVAL = 15 * 60 * 1000;
 
-// Enhanced CORS configuration with QA tree support
+// Enhanced CORS configuration with detailed logging
+app.use((req, res, next) => {
+  console.log('=== CORS REQUEST ===');
+  console.log('Origin:', req.headers.origin);
+  console.log('Method:', req.method);
+  console.log('Headers:', req.headers);
+  next();
+});
+
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? [process.env.FRONTEND_URL, process.env.API_URL].filter(Boolean)
-    : ['http://localhost:3000', 'http://localhost:3001'],
+  origin: function(origin, callback) {
+    const allowedOrigins = process.env.NODE_ENV === 'production'
+      ? [process.env.FRONTEND_URL, process.env.API_URL].filter(Boolean)
+      : ['http://localhost:3000', 'http://localhost:3001', undefined]; // undefined allows non-browser requests
+    
+    console.log('CORS Origin Check:', { 
+      requestOrigin: origin,
+      allowedOrigins,
+      isAllowed: !origin || allowedOrigins.includes(origin)
+    });
+    
+    callback(null, !origin || allowedOrigins.includes(origin));
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
   allowedHeaders: [
     'Content-Type',
     'Authorization',
@@ -200,7 +218,11 @@ app.use(cors({
     'origin',
     'cache-control',
     'if-match',
-    'if-none-match'
+    'if-none-match',
+    'pragma',
+    'sec-fetch-dest',
+    'sec-fetch-mode',
+    'sec-fetch-site'
   ],
   exposedHeaders: [
     'Content-Length', 
@@ -209,34 +231,99 @@ app.use(cors({
     'ETag',
     'Last-Modified',
     'X-Tree-Version',
-    'X-Node-Count'
+    'X-Node-Count',
+    'Access-Control-Allow-Origin',
+    'Access-Control-Allow-Credentials'
   ],
-  maxAge: 600, // Cache preflight requests for 10 minutes
+  maxAge: 86400, // Cache preflight requests for 24 hours in development
   preflightContinue: false,
   optionsSuccessStatus: 204
 }));
 
-// Additional headers for QA tree endpoints
-app.use('/api/qa-tree*', (req, res, next) => {
-  res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
+// Log successful CORS responses
+app.use((req, res, next) => {
+  const oldSend = res.send;
+  res.send = function(...args) {
+    console.log('=== CORS RESPONSE ===');
+    console.log('Status:', res.statusCode);
+    console.log('Headers:', res.getHeaders());
+    oldSend.apply(res, args);
+  };
   next();
 });
 
+// Enhanced headers for all API endpoints
+app.use('/api/*', (req, res, next) => {
+  // Log API request
+  console.log('=== API REQUEST ===');
+  console.log('Path:', req.path);
+  console.log('Method:', req.method);
+  console.log('Query:', req.query);
+  
+  // Set common headers
+  res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  
+  // Development-specific headers
+  if (process.env.NODE_ENV !== 'production') {
+    res.setHeader('X-Debug-Origin', req.headers.origin || 'none');
+    res.setHeader('X-Debug-Method', req.method);
+  }
+  
+  next();
+});
+
+// Enhanced OPTIONS handler with logging
 app.options('*', (req, res) => {
+  console.log('=== OPTIONS REQUEST ===');
+  console.log('Path:', req.path);
+  console.log('Origin:', req.headers.origin);
+  
   const origin = process.env.NODE_ENV === 'production'
     ? process.env.FRONTEND_URL
-    : 'http://localhost:3000';
+    : req.headers.origin || 'http://localhost:3000';
     
-  res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 
-    'Content-Type,Authorization,x-user-id,x-requested-with,x-client-id,x-access-token,accept,origin,cache-control');
-  res.setHeader('Access-Control-Expose-Headers', 'Content-Length,Content-Range,X-Total-Count');
-  res.setHeader('Access-Control-Max-Age', '600');
-  res.sendStatus(200);
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD',
+    'Access-Control-Allow-Headers': [
+      'Content-Type',
+      'Authorization',
+      'x-user-id',
+      'x-requested-with',
+      'x-client-id',
+      'x-access-token',
+      'x-tree-id',
+      'x-node-id',
+      'x-parent-id',
+      'accept',
+      'origin',
+      'cache-control',
+      'pragma',
+      'if-match',
+      'if-none-match'
+    ].join(','),
+    'Access-Control-Expose-Headers': [
+      'Content-Length',
+      'Content-Range',
+      'X-Total-Count',
+      'ETag',
+      'Last-Modified'
+    ].join(','),
+    'Access-Control-Max-Age': process.env.NODE_ENV === 'production' ? '600' : '86400'
+  };
+
+  // Set all CORS headers
+  Object.entries(corsHeaders).forEach(([key, value]) => {
+    res.setHeader(key, value);
+  });
+
+  console.log('=== OPTIONS RESPONSE HEADERS ===');
+  console.log(corsHeaders);
+
+  res.sendStatus(204);
 });
 
 app.use(express.json());
