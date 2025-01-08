@@ -1907,13 +1907,12 @@ app.post('/api/run-getnewsfresh', async (req, res) => {
 // Add these endpoints to your dataServer.js
 
 // Fetch user's saved QA trees
-app.get('/api/qa-trees', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.get('/api/qa-trees', checkJwt, async (req, res) => {
+  console.log('GET /api/qa-trees - Auth:', {
+    userId: req.auth.sub,
+    scope: req.auth.scope,
+    timestamp: new Date().toISOString()
+  });
 
   try {
     const result = await sql`
@@ -1934,14 +1933,14 @@ app.get('/api/qa-trees', async (req, res) => {
 });
 
 // Fetch specific QA tree details
-app.get('/api/qa-tree/:treeId', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
+app.get('/api/qa-tree/:treeId', checkJwt, async (req, res) => {
   const { treeId } = req.params;
-  
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  console.log('GET /api/qa-tree/:treeId - Auth:', {
+    userId: req.auth.sub,
+    treeId,
+    scope: req.auth.scope,
+    timestamp: new Date().toISOString()
+  });
 
   try {
     // Recursive CTE to fetch the entire tree structure
@@ -2019,13 +2018,12 @@ app.get('/api/qa-tree/:treeId', async (req, res) => {
   }
 });
 
-app.post('/api/save-qa-tree', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
-  
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.post('/api/save-qa-tree', checkJwt, async (req, res) => {
+  console.log('POST /api/save-qa-tree - Auth:', {
+    userId: req.auth.sub,
+    scope: req.auth.scope,
+    timestamp: new Date().toISOString()
+  });
 
   const { marketId, treeData } = req.body;
 
@@ -2087,14 +2085,14 @@ app.post('/api/save-qa-tree', async (req, res) => {
 });
 
 // Delete a QA tree
-app.delete('/api/delete-qa-tree/:treeId', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
+app.delete('/api/delete-qa-tree/:treeId', checkJwt, async (req, res) => {
   const { treeId } = req.params;
-  
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  console.log('DELETE /api/delete-qa-tree/:treeId - Auth:', {
+    userId: req.auth.sub,
+    treeId,
+    scope: req.auth.scope,
+    timestamp: new Date().toISOString()
+  });
 
   try {
     await sql`BEGIN`;
@@ -2130,15 +2128,16 @@ app.delete('/api/delete-qa-tree/:treeId', async (req, res) => {
 });
 
 // Update QA tree title
-app.patch('/api/update-qa-tree-title/:treeId', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  const userId = verifyToken(token);
+app.patch('/api/update-qa-tree-title/:treeId', checkJwt, async (req, res) => {
   const { treeId } = req.params;
   const { title } = req.body;
-  
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  console.log('PATCH /api/update-qa-tree-title/:treeId - Auth:', {
+    userId: req.auth.sub,
+    treeId,
+    title,
+    scope: req.auth.scope,
+    timestamp: new Date().toISOString()
+  });
 
   try {
     const result = await sql`
