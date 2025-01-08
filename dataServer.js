@@ -62,9 +62,13 @@ const {
     synthesizeResults 
 } = require('./LLMpandasSimple');
 const { Decimal } = require('decimal.js');
+const qaTreeRouter = require('./qaTreeRouter');
 
 const app = express();
 const port = 3001;
+
+// Add QA Tree routes
+app.use('/api', qaTreeRouter);
 
 
 
