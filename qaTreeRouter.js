@@ -6,19 +6,34 @@ const sql = neon(process.env.DATABASE_URL);
 
 // Get all QA trees for a user
 router.get('/qa-trees', async (req, res) => {
+    const startTime = Date.now();
+    console.log(`[${new Date().toISOString()}] GET /qa-trees - Request received`);
+    
     try {
         const auth0Id = req.headers['x-user-id'];
+        console.log(`[${new Date().toISOString()}] Auth0 ID from header:`, auth0Id);
+        
         if (!auth0Id) {
+            console.log(`[${new Date().toISOString()}] Request rejected - No Auth0 ID provided`);
             return res.status(401).json({ error: 'Unauthorized - User ID required' });
         }
 
+        console.log(`[${new Date().toISOString()}] Executing SQL query for user:`, auth0Id);
+        const queryStartTime = Date.now();
+        
         const trees = await sql`
             SELECT id, market_id, tree_data, title, created_at, updated_at 
             FROM qa_trees 
             WHERE auth0_id = ${auth0Id} 
             ORDER BY updated_at DESC
         `;
-
+        
+        const queryDuration = Date.now() - queryStartTime;
+        console.log(`[${new Date().toISOString()}] SQL query completed in ${queryDuration}ms`);
+        console.log(`[${new Date().toISOString()}] Found ${trees.length} trees for user`);
+        
+        const totalDuration = Date.now() - startTime;
+        console.log(`[${new Date().toISOString()}] Sending response - Total duration: ${totalDuration}ms`);
         res.json(trees);
     } catch (error) {
         console.error('Error fetching QA trees:', error);
