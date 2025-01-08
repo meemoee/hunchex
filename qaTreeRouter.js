@@ -37,16 +37,20 @@ router.get('/qa-trees', async (req, res) => {
     
     try {
         const auth0Id = req.auth.sub;
+        const marketId = req.query.marketId;
+        
         logger.debug('Authentication details:', {
             auth: JSON.stringify(req.auth, null, 2),
             timestamp: new Date().toISOString(),
             endpoint: '/qa-trees',
-            method: 'GET'
+            method: 'GET',
+            marketId
         });
 
         const queryStartTime = Date.now();
         logger.debug('Starting SQL query for user', {
             auth0Id,
+            marketId,
             timestamp: new Date().toISOString(),
             queryStartTime
         });
@@ -54,7 +58,8 @@ router.get('/qa-trees', async (req, res) => {
         const trees = await sql`
             SELECT id, market_id, tree_data, title, created_at, updated_at 
             FROM qa_trees 
-            WHERE auth0_id = ${auth0Id} 
+            WHERE auth0_id = ${auth0Id}
+            ${marketId ? sql`AND market_id = ${marketId}` : sql``}
             ORDER BY updated_at DESC
         `;
         
