@@ -641,7 +641,10 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
                       </div>
                     ) : (
                       <div 
-                        onClick={() => loadSavedTree(tree.tree_id)}
+                        onClick={() => {
+                          console.log('Loading tree with ID:', tree.tree_id);
+                          loadSavedTree(tree.tree_id);
+                        }}
                         className="flex justify-between items-center"
                       >
                         <div>
