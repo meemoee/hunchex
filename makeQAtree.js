@@ -386,6 +386,7 @@ if (!marketId) {
 // Main execution
 async function main() {
   try {
+    console.log('DATABASE_URL:', process.env.DATABASE_URL);
     const sql = neon(process.env.DATABASE_URL);
     const treeId = await generateQaTree(sql, marketId, userId, maxDepth, nodesPerLayer);
     console.log('Successfully generated QA tree with ID:', treeId);
