@@ -1,7 +1,7 @@
 // First, we'll bring in our dependencies
 require('dotenv').config();
 const readline = require('readline');
-const { Pool } = require('pg');
+const { neon } = require('@neondatabase/serverless');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
 
@@ -14,17 +14,6 @@ const logger = {
 // Constants
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const DB_CONFIG = {
-  database: "market_data",
-  user: "market_data_user",
-  password: "1pCU8cOG1npoN0d0",
-  host: "market-data-db.cpk8ckae4ddx.us-east-1.rds.amazonaws.com",
-  port: 5432,
-  ssl: {
-    rejectUnauthorized: false
-  }
-};
-
 // System prompts
 const PERPLEXITY_SYSTEM_PROMPT = `YOU ARE A PRECISE EXTRACTION MACHINE:
 
@@ -64,17 +53,16 @@ REQUIRED OUTPUT FORMAT:
 ZERO DEVIATION FROM SOURCE ALLOWED`;
 
 // Database functions
-async function getMarketInfo(pool, marketId) {
+async function getMarketInfo(sql, marketId) {
   logger.debug(`\nFetching market info for ID: ${marketId}`);
   try {
-    const query = `
+    const result = await sql`
       SELECT m.*, e.title as event_title 
       FROM markets m
       JOIN events e ON m.event_id = e.id
-      WHERE m.id = $1
+      WHERE m.id = ${marketId}
     `;
-    const result = await pool.query(query, [marketId]);
-    const marketInfo = result.rows[0];
+    const marketInfo = result[0];
     
     if (marketInfo) {
       Object.entries(marketInfo).forEach(([key, value]) => {
@@ -285,44 +273,42 @@ async function generateOpenrouterResponse(prompt, model = "perplexity/llama-3.1-
   }
 }
 
-async function saveQaTree(pool, userId, marketId, treeData) {
-  const client = await pool.connect();
-  
+async function saveQaTree(sql, userId, marketId, treeData) {
   try {
-    await client.query('BEGIN');
+    await sql`BEGIN`;
     
     const treeId = crypto.randomUUID();
     
-    await client.query(`
+    await sql`
       INSERT INTO qa_trees (tree_id, user_id, market_id, title, description)
-      VALUES ($1, $2, $3, $4, $5)
-    `, [
-      treeId,
-      userId,
-      marketId,
-      `Analysis Tree for ${marketId}`,
-      "Automatically generated analysis tree"
-    ]);
+      VALUES (
+        ${treeId},
+        ${userId},
+        ${marketId},
+        ${`Analysis Tree for ${marketId}`},
+        ${"Automatically generated analysis tree"}
+      )
+    `;
 
     async function saveNode(nodeData, parentId = null) {
       const nodeId = crypto.randomUUID();
 
-      await client.query(`
+      await sql`
         INSERT INTO qa_nodes (node_id, tree_id, question, answer, created_by)
-        VALUES ($1, $2, $3, $4, $5)
-      `, [
-        nodeId,
-        treeId,
-        nodeData.question || '',
-        nodeData.answer || '',
-        userId
-      ]);
+        VALUES (
+          ${nodeId},
+          ${treeId},
+          ${nodeData.question || ''},
+          ${nodeData.answer || ''},
+          ${userId}
+        )
+      `;
 
       if (parentId) {
-        await client.query(`
+        await sql`
           INSERT INTO qa_node_relationships (parent_node_id, child_node_id, tree_id)
-          VALUES ($1, $2, $3)
-        `, [parentId, nodeId, treeId]);
+          VALUES (${parentId}, ${nodeId}, ${treeId})
+        `;
       }
 
       return nodeId;
@@ -340,19 +326,17 @@ async function saveQaTree(pool, userId, marketId, treeData) {
     }
 
     await saveChildren(treeData, rootNodeId);
-    await client.query('COMMIT');
+    await sql`COMMIT`;
     
     return treeId;
   } catch (error) {
-    await client.query('ROLLBACK');
+    await sql`ROLLBACK`;
     throw error;
-  } finally {
-    client.release();
   }
 }
 
-async function generateQaTree(pool, marketId, userId, maxDepth = 2) {
-  const marketInfo = await getMarketInfo(pool, marketId);
+async function generateQaTree(sql, marketId, userId, maxDepth = 2) {
+  const marketInfo = await getMarketInfo(sql, marketId);
   if (!marketInfo) {
     throw new Error(`Market not found: ${marketId}`);
   }
@@ -418,14 +402,10 @@ async function main() {
       }
     }
 
-    const pool = new Pool(DB_CONFIG);
+    const sql = neon(process.env.DATABASE_URL);
 
-    try {
-      const treeId = await generateQaTree(pool, marketId, userId, maxDepth);
-      console.log(`\nSuccessfully generated QA tree with ID: ${treeId}`);
-    } finally {
-      await pool.end();
-    }
+    const treeId = await generateQaTree(sql, marketId, userId, maxDepth);
+    console.log(`\nSuccessfully generated QA tree with ID: ${treeId}`);
   } catch (error) {
     console.error('Error:', error);
   } finally {
