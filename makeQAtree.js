@@ -274,63 +274,33 @@ async function generateOpenrouterResponse(prompt, model = "perplexity/llama-3.1-
 }
 
 async function saveQaTree(sql, auth0UserId, marketId, treeData) {
+  const treeId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  
   try {
-    await sql`BEGIN`;
-    
-    const treeId = crypto.randomUUID();
-    
     await sql`
-      INSERT INTO qa_trees (tree_id, user_id, market_id, title, description)
-      VALUES (
+      INSERT INTO qa_trees (
+        id, 
+        auth0_id, 
+        market_id, 
+        title, 
+        tree_data,
+        created_at,
+        updated_at
+      ) VALUES (
         ${treeId},
         ${auth0UserId},
         ${marketId},
-        ${`Analysis Tree for ${marketId}`},
-        ${"Automatically generated analysis tree"}
+        ${`Analysis Tree for Market ${marketId}`},
+        ${JSON.stringify(treeData)}::jsonb,
+        ${now},
+        ${now}
       )
     `;
-
-    async function saveNode(nodeData, parentId = null) {
-      const nodeId = crypto.randomUUID();
-
-      await sql`
-        INSERT INTO qa_nodes (node_id, tree_id, question, answer, created_by)
-        VALUES (
-          ${nodeId},
-          ${treeId},
-          ${nodeData.question || ''},
-          ${nodeData.answer || ''},
-          ${auth0UserId}
-        )
-      `;
-
-      if (parentId) {
-        await sql`
-          INSERT INTO qa_node_relationships (parent_node_id, child_node_id, tree_id)
-          VALUES (${parentId}, ${nodeId}, ${treeId})
-        `;
-      }
-
-      return nodeId;
-    }
-
-    const rootNodeId = await saveNode(treeData);
-
-    async function saveChildren(nodeData, parentId) {
-      if (nodeData.children?.length) {
-        for (const child of nodeData.children) {
-          const childId = await saveNode(child, parentId);
-          await saveChildren(child, childId);
-        }
-      }
-    }
-
-    await saveChildren(treeData, rootNodeId);
-    await sql`COMMIT`;
     
     return treeId;
   } catch (error) {
-    await sql`ROLLBACK`;
+    logger.error("Error saving QA tree:", error);
     throw error;
   }
 }
