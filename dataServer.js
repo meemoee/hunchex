@@ -179,20 +179,40 @@ async function authenticateKalshiElections() {
 const CACHE_UPDATE_INTERVAL = 5 * 60 * 1000;
 const UNIQUE_TICKERS_UPDATE_INTERVAL = 15 * 60 * 1000;
 
-// Update the Express app configuration
+// Enhanced CORS configuration
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? process.env.FRONTEND_URL 
-    : 'http://localhost:3000',
+    ? [process.env.FRONTEND_URL, process.env.API_URL].filter(Boolean)
+    : ['http://localhost:3000', 'http://localhost:3001'],
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id']
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'x-user-id',
+    'x-requested-with',
+    'x-client-id',
+    'x-access-token',
+    'accept',
+    'origin',
+    'cache-control'
+  ],
+  exposedHeaders: ['Content-Length', 'Content-Range', 'X-Total-Count'],
+  maxAge: 600 // Cache preflight requests for 10 minutes
 }));
 
 app.options('*', (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', 'http://localhost:3000');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,x-user-id');
+  const origin = process.env.NODE_ENV === 'production'
+    ? process.env.FRONTEND_URL
+    : 'http://localhost:3000';
+    
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 
+    'Content-Type,Authorization,x-user-id,x-requested-with,x-client-id,x-access-token,accept,origin,cache-control');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Length,Content-Range,X-Total-Count');
+  res.setHeader('Access-Control-Max-Age', '600');
   res.sendStatus(200);
 });
 
