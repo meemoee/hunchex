@@ -1,9 +1,6 @@
-const express = require('express');
-const router = express.Router();
 const { neon } = require('@neondatabase/serverless');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
-const { auth } = require('express-oauth2-jwt-bearer');
 
 // Logger setup
 const logger = {
@@ -183,7 +180,7 @@ GENERATE A PRECISE, VERBATIM QUESTION CAPTURING THE FUNDAMENTAL MARKET UNCERTAIN
   return await generateOpenrouterResponse(prompt);
 }
 
-async function generateSubQuestions(parentQuestion, marketInfo, depth = 0, maxDepth = 2) {
+async function generateSubQuestions(parentQuestion, marketInfo, depth = 0, maxDepth = 2, nodesPerLayer = 3) {
   const prompt = `
 PARENT QUESTION CONTEXT:
 QUESTION: ${parentQuestion.question}
@@ -194,7 +191,7 @@ Title: ${marketInfo.question}
 Description: ${marketInfo.description}
 
 INSTRUCTION:
-EXTRACT 3 PRECISE SUB-QUESTIONS THAT:
+EXTRACT ${nodesPerLayer} PRECISE SUB-QUESTIONS THAT:
 - DIRECTLY RELATE TO PARENT QUESTION
 - CAPTURE DISTINCT ANALYTICAL PERSPECTIVES
 - DO NOT OVERLAP IN QUESTION MATTER
@@ -374,23 +371,28 @@ async function generateQaTree(sql, marketId, userId, maxDepth = 2) {
   return await saveQaTree(sql, userId, marketId, treeData);
 }
 
-// Express route handler for QA tree generation
-router.post('/generate-qa-tree', auth(), async (req, res) => {
-  const auth0UserId = req.auth.sub;
-  const { marketId, maxDepth = 2 } = req.body;
+// Parse command line arguments
+const args = process.argv.slice(2);
+const marketId = args[0];
+const maxDepth = parseInt(args[1]) || 2;
+const nodesPerLayer = parseInt(args[2]) || 3;
+const userId = 'google-oauth2|118350871750711913024';
 
-  if (!marketId) {
-    return res.status(400).json({ error: 'Market ID is required' });
-  }
+if (!marketId) {
+  console.error('Usage: node makeQAtree.js <marketId> [maxDepth] [nodesPerLayer]');
+  process.exit(1);
+}
 
+// Main execution
+async function main() {
   try {
     const sql = neon(process.env.DATABASE_URL);
-    const treeId = await generateQaTree(sql, marketId, auth0UserId, maxDepth);
-    res.json({ treeId });
+    const treeId = await generateQaTree(sql, marketId, userId, maxDepth, nodesPerLayer);
+    console.log('Successfully generated QA tree with ID:', treeId);
   } catch (error) {
     console.error('Error generating QA tree:', error);
-    res.status(500).json({ error: 'Failed to generate QA tree', details: error.message });
+    process.exit(1);
   }
-});
+}
 
-module.exports = router;
+main();
