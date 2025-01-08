@@ -151,11 +151,14 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
     })
 
     return nodes.map(transformNode)
-  }, [])
+  }, [marketId])
 
   // Fetch saved QA trees
   const fetchSavedTrees = useCallback(async () => {
+    const fetchUrl = `/api/qa-trees?marketId=${marketId}`;
     console.group('Fetching QA Trees')
+    console.log('Fetching trees for marketId:', marketId)
+    console.log('Fetch URL:', fetchUrl)
     console.log('Starting fetch operation at:', new Date().toISOString())
     
     setIsLoading(true)
