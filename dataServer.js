@@ -97,12 +97,46 @@ const polyOrderbook = new PolyOrderbook();
 const sql = neon(process.env.DATABASE_URL);
 const orderManager = new OrderManager(sql, redis, polyOrderbook, broadcastToUser);
 
-// Auth0 configuration
+// Auth0 configuration with enhanced logging
 const checkJwt = auth({
   audience: process.env.AUTH0_AUDIENCE,
   issuerBaseURL: process.env.AUTH0_ISSUER_BASE_URL,
-  tokenSigningAlg: 'RS256'
+  tokenSigningAlg: 'RS256',
+  // Add logging for token validation
+  onRequestStart: (req) => {
+    console.log('=== AUTH0 REQUEST START ===', {
+      path: req.path,
+      method: req.method,
+      headers: {
+        ...req.headers,
+        authorization: req.headers.authorization ? '[REDACTED]' : undefined
+      },
+      timestamp: new Date().toISOString()
+    });
+  },
+  onRequestError: (err, req) => {
+    console.error('=== AUTH0 REQUEST ERROR ===', {
+      error: err.message,
+      code: err.status || 500,
+      path: req.path,
+      method: req.method,
+      timestamp: new Date().toISOString(),
+      stack: err.stack
+    });
+  }
 });
+
+// Middleware to log successful auth
+const logSuccessfulAuth = (req, res, next) => {
+  console.log('=== AUTH0 SUCCESS ===', {
+    userId: req.auth?.sub,
+    scope: req.auth?.scope,
+    path: req.path,
+    method: req.method,
+    timestamp: new Date().toISOString()
+  });
+  next();
+};
 
 // OpenAI API key and client
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -1994,8 +2028,10 @@ app.post('/api/run-getnewsfresh', async (req, res) => {
 // Add these endpoints to your dataServer.js
 
 // Fetch user's saved QA trees
-app.get('/api/qa-trees', checkJwt, async (req, res) => {
-  console.log('GET /api/qa-trees - Auth:', {
+app.get('/api/qa-trees', checkJwt, logSuccessfulAuth, async (req, res) => {
+  const requestId = uuidv4();
+  console.log('=== QA TREES REQUEST START ===', {
+    requestId,
     userId: req.auth.sub,
     scope: req.auth.scope,
     timestamp: new Date().toISOString()
@@ -2012,17 +2048,35 @@ app.get('/api/qa-trees', checkJwt, async (req, res) => {
       WHERE user_id = ${userId}
       ORDER BY created_at DESC
     `;
+    console.log('=== QA TREES REQUEST SUCCESS ===', {
+      requestId,
+      userId: req.auth.sub,
+      treesFound: result.rows.length,
+      timestamp: new Date().toISOString()
+    });
     res.json(result.rows);
   } catch (error) {
-    console.error('Error fetching QA trees:', error);
-    res.status(500).json({ error: 'Failed to fetch QA trees' });
+    console.error('=== QA TREES REQUEST ERROR ===', {
+      requestId,
+      userId: req.auth.sub,
+      error: error.message,
+      stack: error.stack,
+      timestamp: new Date().toISOString()
+    });
+    res.status(500).json({ 
+      error: 'Failed to fetch QA trees',
+      requestId,
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
 // Fetch specific QA tree details
-app.get('/api/qa-tree/:treeId', checkJwt, async (req, res) => {
+app.get('/api/qa-tree/:treeId', checkJwt, logSuccessfulAuth, async (req, res) => {
   const { treeId } = req.params;
-  console.log('GET /api/qa-tree/:treeId - Auth:', {
+  const requestId = uuidv4();
+  console.log('=== QA TREE DETAIL REQUEST START ===', {
+    requestId,
     userId: req.auth.sub,
     treeId,
     scope: req.auth.scope,
