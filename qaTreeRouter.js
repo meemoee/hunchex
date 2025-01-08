@@ -37,10 +37,19 @@ router.get('/qa-trees', async (req, res) => {
     
     try {
         const auth0Id = req.auth.sub;
-        logger.debug('Processing request for Auth0 ID:', auth0Id);
+        logger.debug('Authentication details:', {
+            auth: JSON.stringify(req.auth, null, 2),
+            timestamp: new Date().toISOString(),
+            endpoint: '/qa-trees',
+            method: 'GET'
+        });
 
         const queryStartTime = Date.now();
-        logger.debug('Starting SQL query for user', auth0Id);
+        logger.debug('Starting SQL query for user', {
+            auth0Id,
+            timestamp: new Date().toISOString(),
+            queryStartTime
+        });
         
         const trees = await sql`
             SELECT id, market_id, tree_data, title, created_at, updated_at 
@@ -50,18 +59,26 @@ router.get('/qa-trees', async (req, res) => {
         `;
         
         const queryDuration = Date.now() - queryStartTime;
-        console.log(`[${new Date().toISOString()}] SQL query completed in ${queryDuration}ms`);
-        console.log(`[${new Date().toISOString()}] Found ${trees.length} trees for user`);
-        
-        if (trees.length > 0) {
-            console.log(`[${new Date().toISOString()}] First tree details:`, {
-                id: trees[0].id,
-                marketId: trees[0].market_id,
-                title: trees[0].title,
-                created: trees[0].created_at,
-                updated: trees[0].updated_at
+        logger.debug('SQL query completed', {
+            timestamp: new Date().toISOString(),
+            duration: queryDuration,
+            treeCount: trees.length,
+            auth0Id
+        });
+
+        // Log detailed information about each tree
+        trees.forEach((tree, index) => {
+            logger.debug(`Tree ${index + 1} details:`, {
+                timestamp: new Date().toISOString(),
+                treeId: tree.id,
+                marketId: tree.market_id,
+                title: tree.title,
+                created: tree.created_at,
+                updated: tree.updated_at,
+                dataSize: JSON.stringify(tree.tree_data).length,
+                auth0Id
             });
-        }
+        });
         
         const totalDuration = Date.now() - startTime;
         console.log(`[${new Date().toISOString()}] Sending response - Total duration: ${totalDuration}ms`);
@@ -100,11 +117,37 @@ router.get('/qa-trees/:id', async (req, res) => {
 
 // Save a new QA tree
 router.post('/qa-trees', async (req, res) => {
+    const startTime = Date.now();
+    logger.debug('POST /qa-trees - Request received', {
+        timestamp: new Date().toISOString(),
+        endpoint: '/qa-trees',
+        method: 'POST'
+    });
+
     try {
         const auth0Id = req.auth.sub;
+        logger.debug('Authentication details for save:', {
+            auth: JSON.stringify(req.auth, null, 2),
+            timestamp: new Date().toISOString()
+        });
 
         const { marketId, treeData, title } = req.body;
+        logger.debug('Received tree data:', {
+            timestamp: new Date().toISOString(),
+            auth0Id,
+            marketId,
+            title,
+            treeDataSize: JSON.stringify(treeData).length,
+            treeStructure: JSON.stringify(treeData, null, 2)
+        });
+
         if (!marketId || !treeData) {
+            logger.error('Missing required fields:', {
+                timestamp: new Date().toISOString(),
+                auth0Id,
+                hasMarketId: !!marketId,
+                hasTreeData: !!treeData
+            });
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
@@ -114,10 +157,28 @@ router.post('/qa-trees', async (req, res) => {
             RETURNING id
         `;
 
+        const endTime = Date.now();
+        logger.debug('Tree successfully saved:', {
+            timestamp: new Date().toISOString(),
+            duration: endTime - startTime,
+            treeId: result[0].id,
+            auth0Id,
+            marketId
+        });
+        
         res.json({ id: result[0].id });
     } catch (error) {
-        console.error('Error saving QA tree:', error);
-        res.status(500).json({ error: 'Internal Server Error' });
+        logger.error('Error saving QA tree:', {
+            timestamp: new Date().toISOString(),
+            error: error.message,
+            stack: error.stack,
+            auth0Id: req.auth?.sub,
+            marketId: req.body?.marketId
+        });
+        res.status(500).json({ 
+            error: 'Internal Server Error',
+            requestId: Date.now().toString(36)
+        });
     }
 });
 
