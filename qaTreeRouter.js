@@ -95,7 +95,19 @@ router.get('/qa-trees', async (req, res) => {
         if (marketId) {
             const cleanMarketId = marketId.toString().trim();
             logger.debug('MarketId clean:', { original: marketId, cleaned: cleanMarketId });
-            conditions.push(sql`CAST(market_id AS text) = CAST(${cleanMarketId} AS text)`);
+            logger.debug('Market ID Format:', {
+                isKalshi: cleanMarketId.includes('-'),
+                isPoly: cleanMarketId.startsWith('0x'),
+                isNumeric: /^\d+$/.test(cleanMarketId),
+                marketId: cleanMarketId
+            });
+            if (cleanMarketId.includes('-')) {
+                conditions.push(sql`market_id = ${cleanMarketId}`);
+            } else if (cleanMarketId.startsWith('0x')) {
+                conditions.push(sql`market_id = ${cleanMarketId}`);
+            } else {
+                conditions.push(sql`market_id = ${cleanMarketId} OR market_id ~ '^[0-9]+$' AND CAST(market_id AS text) = ${cleanMarketId}`);
+            }
         } else {
             // Return only records with null market_id when no marketId provided
             conditions.push(sql`market_id IS NULL`);
