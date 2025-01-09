@@ -2030,14 +2030,45 @@ app.post('/api/run-getnewsfresh', async (req, res) => {
 // Fetch user's saved QA trees
 app.get('/api/qa-trees', checkJwt, logSuccessfulAuth, async (req, res) => {
   const requestId = uuidv4();
+  const startTime = Date.now();
+
+  // Pre-request logging
   console.log('=== QA TREES REQUEST START ===', {
     requestId,
-    userId: req.auth.sub,
-    scope: req.auth.scope,
+    method: req.method,
+    url: req.originalUrl,
+    headers: {
+      ...req.headers,
+      authorization: req.headers.authorization ? '[REDACTED]' : undefined
+    },
+    userId: req.auth?.sub,
+    scope: req.auth?.scope,
+    marketId: req.query.marketId, // Log if market ID is passed
     timestamp: new Date().toISOString()
   });
 
+  // Validate auth
+  if (!req.auth?.sub) {
+    console.error('=== QA TREES AUTH ERROR ===', {
+      requestId,
+      error: 'Missing user ID in auth token',
+      timestamp: new Date().toISOString()
+    });
+    return res.status(401).json({ 
+      error: 'Authentication required',
+      requestId 
+    });
+  }
+
   try {
+    // Log pre-query state
+    console.log('=== QA TREES PRE-QUERY ===', {
+      requestId,
+      userId: req.auth.sub,
+      sqlTemplate: 'SELECT tree_id, title, description, created_at FROM qa_trees WHERE user_id = $userId ORDER BY created_at DESC',
+      timestamp: new Date().toISOString()
+    });
+
     const result = await sql`
       SELECT 
         tree_id, 
@@ -2048,25 +2079,93 @@ app.get('/api/qa-trees', checkJwt, logSuccessfulAuth, async (req, res) => {
       WHERE user_id = ${req.auth.sub}
       ORDER BY created_at DESC
     `;
-    console.log('=== QA TREES REQUEST SUCCESS ===', {
+
+    // Log query results
+    console.log('=== QA TREES QUERY COMPLETE ===', {
       requestId,
       userId: req.auth.sub,
-      treesFound: result.rows.length,
+      rowCount: result?.length || 0,
+      executionTimeMs: Date.now() - startTime,
       timestamp: new Date().toISOString()
     });
-    res.json(result.rows);
+
+    // Log sample of results (first 2 items)
+    if (result && result.length > 0) {
+      console.log('=== QA TREES SAMPLE DATA ===', {
+        requestId,
+        sampleSize: Math.min(2, result.length),
+        sample: result.slice(0, 2).map(row => ({
+          tree_id: row.tree_id,
+          title: row.title,
+          created_at: row.created_at
+        })),
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Set response headers
+    res.set({
+      'X-Request-ID': requestId,
+      'X-Response-Time': `${Date.now() - startTime}ms`
+    });
+
+    // Send response
+    res.json(result);
+
+    // Log response
+    console.log('=== QA TREES RESPONSE SENT ===', {
+      requestId,
+      userId: req.auth.sub,
+      statusCode: res.statusCode,
+      responseHeaders: res.getHeaders(),
+      responseSize: JSON.stringify(result).length,
+      totalTimeMs: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    });
+
   } catch (error) {
-    console.error('=== QA TREES REQUEST ERROR ===', {
+    // Detailed error logging
+    console.error('=== QA TREES ERROR ===', {
       requestId,
       userId: req.auth.sub,
-      error: error.message,
+      errorName: error.name,
+      errorMessage: error.message,
+      errorCode: error.code, // SQL error code if available
+      errorDetail: error.detail, // Detailed SQL error if available
+      errorHint: error.hint, // SQL error hint if available
       stack: error.stack,
+      totalTimeMs: Date.now() - startTime,
       timestamp: new Date().toISOString()
     });
-    res.status(500).json({ 
+
+    // Set error response headers
+    res.set({
+      'X-Request-ID': requestId,
+      'X-Error-Code': error.code || 'UNKNOWN',
+      'X-Response-Time': `${Date.now() - startTime}ms`
+    });
+
+    // Send error response
+    const statusCode = error.code === '42P01' ? 404 : 500; // Table not found = 404
+    res.status(statusCode).json({ 
       error: 'Failed to fetch QA trees',
       requestId,
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      errorCode: error.code,
+      details: process.env.NODE_ENV === 'development' ? {
+        message: error.message,
+        detail: error.detail,
+        hint: error.hint
+      } : undefined
+    });
+
+    // Log error response
+    console.log('=== QA TREES ERROR RESPONSE SENT ===', {
+      requestId,
+      userId: req.auth.sub,
+      statusCode,
+      responseHeaders: res.getHeaders(),
+      totalTimeMs: Date.now() - startTime,
+      timestamp: new Date().toISOString()
     });
   }
 });
