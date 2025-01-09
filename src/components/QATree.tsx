@@ -163,36 +163,80 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
     console.log('Auth URL:', fetchUrl);
     console.log('User:', user?.sub);
     setIsLoading(true);
+    
     try {
+      // Get access token from Auth0
+      let accessToken;
+      try {
+        const response = await fetch('/api/auth/token');
+        if (!response.ok) {
+          throw new Error('Failed to get access token');
+        }
+        const { token } = await response.json();
+        accessToken = token;
+        console.log('Successfully obtained access token');
+      } catch (tokenError) {
+        console.error('Error getting access token:', tokenError);
+        toast.error('Authentication error. Please try again.');
+        return;
+      }
+
+      // Make the API request with the token
       const response = await fetch(fetchUrl, {
         credentials: 'include',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+          'X-Request-ID': Math.random().toString(36).substring(7),
+          'X-Client-Version': '1.0.0'
         }
       });
-      console.log('Response:', { status: response.status, ok: response.ok });
+      
+      console.log('Response:', { 
+        status: response.status, 
+        ok: response.ok,
+        headers: Object.fromEntries(response.headers.entries())
+      });
       
       if (response.status === 401) {
-        console.error('Unauthorized - invalid or expired token');
+        console.error('Unauthorized - invalid or expired token', {
+          user: user?.sub,
+          tokenPresent: !!accessToken
+        });
         toast.error('Session expired. Please refresh the page.');
         return;
       }
       
       if (!response.ok) {
-        throw new Error(`HTTP error: ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`HTTP error ${response.status}: ${errorText}`);
       }
       
       const data = await response.json();
-      console.log(`Fetched ${data.length} trees for market ${marketId}`);
+      console.log(`Fetched ${data.length} trees for market ${marketId}`, {
+        firstTree: data[0]?.tree_id,
+        timestamp: new Date().toISOString()
+      });
       setSavedTrees(data);
     } catch (error) {
-      console.error('Error fetching QA trees:', error);
+      console.error('Error fetching QA trees:', {
+        error: {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
+        },
+        context: {
+          marketId,
+          userId: user?.sub,
+          timestamp: new Date().toISOString()
+        }
+      });
       toast.error('Failed to load QA trees');
     } finally {
       setIsLoading(false);
       console.groupEnd();
     }
-  }, [marketId])
+  }, [marketId, user?.sub])
 
   // Load a specific saved tree
   const loadSavedTree = useCallback(async (treeId: string) => {
