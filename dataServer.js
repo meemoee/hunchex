@@ -2071,12 +2071,14 @@ app.get('/api/qa-trees', checkJwt, logSuccessfulAuth, async (req, res) => {
 
     const result = await sql`
       SELECT 
-        tree_id, 
-        title, 
-        description, 
-        created_at
+        id,
+        title,
+        market_id,
+        tree_data,
+        created_at,
+        updated_at
       FROM qa_trees 
-      WHERE user_id = ${req.auth.sub}
+      WHERE auth0_id = ${req.auth.sub}
       ORDER BY created_at DESC
     `;
 
