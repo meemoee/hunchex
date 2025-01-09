@@ -81,15 +81,29 @@ router.get('/qa-trees', async (req, res) => {
             }
         });
         
+        // Log received marketId details
+        logger.debug('MarketId details:', {
+            received: marketId,
+            receivedType: typeof marketId,
+            trimmed: marketId?.trim(),
+            trimmedType: typeof marketId?.trim()
+        });
+
         const conditions = [];
         conditions.push(sql`auth0_id = ${auth0Id}`);
         
-        if (marketId && marketId.trim()) {
-            conditions.push(sql`market_id = ${marketId.trim()}`);
+        if (marketId) {
+            // Exact match for market_id when provided
+            conditions.push(sql`market_id = ${marketId.toString().trim()}`);
+        } else {
+            // Return only records with null market_id when no marketId provided
+            conditions.push(sql`market_id IS NULL`);
         }
 
         logger.debug('SQL conditions:', {
-            conditions: conditions.map(c => c.sql())
+            conditions: conditions.map(c => c.sql()),
+            marketIdPresent: !!marketId,
+            appliedConditions: conditions.length
         });
 
         const queryString = sql`
