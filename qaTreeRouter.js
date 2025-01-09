@@ -93,8 +93,9 @@ router.get('/qa-trees', async (req, res) => {
         conditions.push(sql`auth0_id = ${auth0Id}`);
         
         if (marketId) {
-            // Exact match for market_id when provided
-            conditions.push(sql`market_id = ${marketId.toString().trim()}`);
+            const cleanMarketId = marketId.toString().trim();
+            logger.debug('MarketId clean:', { original: marketId, cleaned: cleanMarketId });
+            conditions.push(sql`CAST(market_id AS text) = CAST(${cleanMarketId} AS text)`);
         } else {
             // Return only records with null market_id when no marketId provided
             conditions.push(sql`market_id IS NULL`);
