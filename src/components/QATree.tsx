@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useUser } from '@auth0/nextjs-auth0/client'
 
 function formatMarkdown(content: string) {
   if (typeof content !== 'string') {
@@ -95,6 +96,7 @@ interface QATreeProps {
 }
 
 const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
+  const { user } = useUser()
   const [translate, setTranslate] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [selectedNode, setSelectedNode] = useState<TreeNode | null>(null)
@@ -151,7 +153,7 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
     })
 
     return nodes.map(transformNode)
-  }, [marketId])
+  }, [marketId, user])
 
   // Fetch saved QA trees
   const fetchSavedTrees = useCallback(async () => {
@@ -159,18 +161,13 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
     console.group('Fetching QA Trees');
     console.log('Market ID:', marketId);
     console.log('Auth URL:', fetchUrl);
+    console.log('User:', user?.sub);
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('auth0Token');
-      if (!token) {
-        console.error('No auth token found');
-        return;
-      }
-      console.log('Making authenticated request...');
       const response = await fetch(fetchUrl, {
         credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         }
       });
       console.log('Response:', { status: response.status, ok: response.ok });
