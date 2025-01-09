@@ -902,7 +902,7 @@ async function getUserBalance(userId) {
     const result = await sql`
       SELECT balance 
       FROM user_balances 
-      WHERE user_id = ${userId}
+      WHERE user_id = ${req.auth.sub}
     `;
     if (result.length > 0) {
       return parseFloat(result[0].balance);
