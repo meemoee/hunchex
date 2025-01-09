@@ -2045,7 +2045,7 @@ app.get('/api/qa-trees', checkJwt, logSuccessfulAuth, async (req, res) => {
         description, 
         created_at
       FROM qa_trees 
-      WHERE user_id = ${userId}
+      WHERE user_id = ${req.auth.sub}
       ORDER BY created_at DESC
     `;
     console.log('=== QA TREES REQUEST SUCCESS ===', {
