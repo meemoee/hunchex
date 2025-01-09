@@ -11,6 +11,10 @@ const nextConfig = {
 		  destination: 'http://localhost:3001/api/top_movers'
 		},
 		{
+		  source: '/api/qa-trees',
+		  destination: 'http://localhost:3001/api/qa-trees'
+		},
+		{
 		  source: '/api/balance',
 		  destination: 'http://localhost:3000/api/balance'  // or your appropriate backend port
 		}
