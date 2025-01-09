@@ -52,7 +52,9 @@ router.get('/qa-trees', async (req, res) => {
             typeof: typeof marketId,
             isEmpty: marketId === '',
             isNull: marketId === null,
-            isUndefined: marketId === undefined
+            isUndefined: marketId === undefined,
+            parsedNumeric: !isNaN(marketId),
+            exactValue: `"${marketId}"`
         });
 
         if (!marketId) {
@@ -95,6 +97,11 @@ router.get('/qa-trees', async (req, res) => {
         if (marketId) {
             const cleanMarketId = marketId.toString().trim();
             logger.debug('MarketId clean:', { original: marketId, cleaned: cleanMarketId });
+            logger.debug('SQL market ID condition:', {
+                original: marketId,
+                cleaned: cleanMarketId,
+                sql: sql`market_id = ${cleanMarketId}`.sql()
+            });
             logger.debug('Market ID Format:', {
                 isKalshi: cleanMarketId.includes('-'),
                 isPoly: cleanMarketId.startsWith('0x'),
@@ -125,12 +132,22 @@ router.get('/qa-trees', async (req, res) => {
             WHERE ${sql.join(conditions, sql` AND `)}
             ORDER BY updated_at DESC
         `;
-        
-        logger.debug('Running SQL query:', { 
-            sqlString: await queryString.sql()
+
+        logger.debug('Final SQL query:', {
+            fullQuery: await queryString.sql(),
+            conditions: conditions.map(c => c.sql()),
+            parameters: queryString.rawValues,
+            auth0Id,
+            marketId
         });
         
         const trees = await queryString;
+        
+        logger.debug('Query results:', {
+            count: trees.length,
+            marketIds: trees.map(t => t.market_id),
+            auth0Id
+        });
         
         const queryDuration = Date.now() - queryStartTime;
         logger.debug('SQL query completed', {
