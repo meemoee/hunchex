@@ -156,80 +156,44 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
   // Fetch saved QA trees
   const fetchSavedTrees = useCallback(async () => {
     const fetchUrl = `/api/qa-trees?marketId=${marketId}`;
-    console.group('Fetching QA Trees')
-    console.log('Fetching trees for marketId:', marketId)
-    console.log('Fetch URL:', fetchUrl)
-    console.log('Starting fetch operation at:', new Date().toISOString())
-    
-    setIsLoading(true)
+    console.group('Fetching QA Trees');
+    console.log('Market ID:', marketId);
+    console.log('Auth URL:', fetchUrl);
+    setIsLoading(true);
     try {
-      console.log('DEBUG: Market ID =', marketId);
-      console.log('DEBUG: Full fetch URL =', '/api/qa-trees?marketId=' + marketId);
-      console.log('DEBUG: Options =', {credentials: 'include'});
-      
-      console.time('API Request Duration')
-      const response = await fetch(`/api/qa-trees?marketId=${marketId}`, {
-        credentials: 'include'
-      })
-      console.timeEnd('API Request Duration')
-
-      console.group('Response Details')
-      console.log('Status:', response.status)
-      console.log('Status Text:', response.statusText)
-      console.log('Headers:', Object.fromEntries([...response.headers]))
-      
-      const data = await response.json()
-      console.log('Response Body:', data)
-      console.groupEnd()
-
-      if (!response.ok) {
-        console.group('Request Failed')
-        console.error('Error Details:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: data.error,
-          timestamp: new Date().toISOString()
-        })
-        console.groupEnd()
-        toast.error(data.error || 'Failed to fetch saved trees')
-        console.groupEnd()
-        return
+      const token = localStorage.getItem('auth0Token');
+      if (!token) {
+        console.error('No auth token found');
+        return;
       }
-
-      console.group('Success Details')
-      console.log(`Fetched ${data.length} trees`)
-      console.log('First tree preview:', data[0] ? {
-        id: data[0].tree_id,
-        title: data[0].title,
-        created: data[0].created_at
-      } : 'No trees found')
-      console.groupEnd()
-      
-      setSavedTrees(data)
-    } catch (error) {
-      console.group('Error Details')
-      if (error instanceof Error) {
-        console.error('Error Name:', error.name)
-        console.error('Error Message:', error.message)
-        console.error('Stack Trace:', error.stack)
-        if (error instanceof TypeError) {
-          console.error('Network Error Details:', {
-            type: 'TypeError',
-            likely_cause: 'Network or CORS issue'
-          })
+      console.log('Making authenticated request...');
+      const response = await fetch(fetchUrl, {
+        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${token}`
         }
-      } else {
-        console.error('Unknown Error Type:', error)
-      }
-      console.groupEnd()
+      });
+      console.log('Response:', { status: response.status, ok: response.ok });
       
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
-      console.error('Final Error Message:', errorMessage)
-      toast.error('Failed to fetch saved trees')
+      if (response.status === 401) {
+        console.error('Unauthorized - invalid or expired token');
+        toast.error('Session expired. Please refresh the page.');
+        return;
+      }
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log(`Fetched ${data.length} trees for market ${marketId}`);
+      setSavedTrees(data);
+    } catch (error) {
+      console.error('Error fetching QA trees:', error);
+      toast.error('Failed to load QA trees');
     } finally {
-      setIsLoading(false)
-      console.log('Fetch operation completed at:', new Date().toISOString())
-      console.groupEnd()
+      setIsLoading(false);
+      console.groupEnd();
     }
   }, [marketId])
 
