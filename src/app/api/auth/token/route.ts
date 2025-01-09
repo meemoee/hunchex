@@ -1,30 +1,33 @@
-import { getSession } from '@auth0/nextjs-auth0/edge';
+import { getSession } from '@auth0/nextjs-auth0';
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    // Use async cookies() method
-    const cookieStore = await cookies();
-    
-    // Get the session using the edge runtime method
-    const session = await getSession({ cookies: () => cookieStore });
+    const session = await getSession();
+    console.log('Session details:', {
+      exists: !!session,
+      hasUser: !!session?.user,
+      hasToken: !!session?.accessToken,
+      userId: session?.user?.sub
+    });
 
-    // Check if user is authenticated
     if (!session?.user) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // Return the access token
-    return NextResponse.json({ 
-      accessToken: session.accessToken,
+    if (!session.accessToken) {
+      return NextResponse.json({ error: 'No access token found' }, { status: 401 });
+    }
+
+    return NextResponse.json({
+      token: session.accessToken,
       userId: session.user.sub
     });
 
   } catch (error) {
     console.error('Token retrieval error:', error);
     return NextResponse.json(
-      { error: 'Failed to retrieve access token', details: error.toString() }, 
+      { error: 'Failed to retrieve access token', details: error.toString() },
       { status: 500 }
     );
   }
