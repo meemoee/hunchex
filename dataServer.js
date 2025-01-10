@@ -173,34 +173,51 @@ let kalshiTokens = {
 app.use(express.json()); // Ensure this is at the top of your middleware setup
 
 app.post('/api/qa-trees/generate', async (req, res) => {
-  console.log('=== QA TREE GENERATION REQUEST ===');
+  const requestId = crypto.randomUUID();
+  console.log(`=== QA TREE GENERATION REQUEST (${requestId}) ===`);
+  console.log('Timestamp:', new Date().toISOString());
   
   // Log raw request data
   let bodyData = '';
   req.on('data', chunk => {
     bodyData += chunk.toString();
+    console.log(`Received chunk of size: ${chunk.length} bytes`);
   });
 
   req.on('end', async () => {
     try {
+      console.log(`=== PROCESSING REQUEST ${requestId} ===`);
       console.log('Raw Request Body:', bodyData);
-      const parsedBody = JSON.parse(bodyData);
+      console.log('Request Headers:', req.headers);
       
+      const parsedBody = JSON.parse(bodyData);
       console.log('Parsed Request Body:', parsedBody);
 
       const marketId = parsedBody.marketId;
       const maxDepth = parsedBody.maxDepth;
       const nodesPerLayer = parsedBody.nodesPerLayer;
-
       const auth0Id = req.headers['x-user-id'];
 
+      console.log('Validated Parameters:', {
+        marketId,
+        maxDepth,
+        nodesPerLayer,
+        auth0Id,
+        requestId
+      });
+
       if (!auth0Id) {
+        console.error(`${requestId} - Authentication Error: Missing user ID`);
         return res.status(401).json({ error: 'Unauthorized - User ID required' });
       }
 
       if (!marketId) {
+        console.error(`${requestId} - Validation Error: Missing market ID`);
         return res.status(400).json({ error: 'Market ID is required' });
       }
+
+      console.log(`${requestId} - Starting QA Tree generation...`);
+      console.time(`qa-tree-generation-${requestId}`);
 
       const treeId = await generateQaTree(
         sql, 
@@ -208,16 +225,25 @@ app.post('/api/qa-trees/generate', async (req, res) => {
         auth0Id, 
         {
           maxDepth: maxDepth || 2, 
-          nodesPerLayer: nodesPerLayer || 3
+          nodesPerLayer: nodesPerLayer || 3,
+          requestId // Pass requestId to track the full process
         }
       );
 
-      res.json({ 
+      console.timeEnd(`qa-tree-generation-${requestId}`);
+      console.log(`${requestId} - QA Tree generation completed successfully`);
+
+      const response = { 
         treeId,
         message: 'QA Tree generated successfully',
         marketId,
-        userId: auth0Id
-      });
+        userId: auth0Id,
+        requestId,
+        generationTime: process.hrtime()
+      };
+
+      console.log(`${requestId} - Sending response:`, response);
+      res.json(response);
 
     } catch (error) {
       console.error('QA Tree Generation Error:', error);

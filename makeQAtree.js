@@ -329,13 +329,20 @@ async function saveQaTree(sql, auth0UserId, marketId, treeData) {
 }
 
 async function generateQaTree(dbConnection, marketId, userId, options = {}) {
-  logger.info('Starting QA tree generation:', {
+  const { requestId = crypto.randomUUID() } = options;
+  const startTime = process.hrtime();
+  
+  logger.info(`[${requestId}] Starting QA tree generation:`, {
     marketId,
     userId,
-    options
+    options,
+    timestamp: new Date().toISOString()
   });
   
-  const { maxDepth = config.DEFAULT_MAX_DEPTH, nodesPerLayer = config.DEFAULT_NODES_PER_LAYER } = options;
+  const { 
+    maxDepth = config.DEFAULT_MAX_DEPTH, 
+    nodesPerLayer = config.DEFAULT_NODES_PER_LAYER 
+  } = options;
   logger.debug('Using configuration:', {
     maxDepth,
     nodesPerLayer,
@@ -343,15 +350,21 @@ async function generateQaTree(dbConnection, marketId, userId, options = {}) {
     defaultNodesPerLayer: config.DEFAULT_NODES_PER_LAYER
   });
 
+  logger.debug(`[${requestId}] Fetching market info...`);
   const marketInfo = await getMarketInfo(dbConnection, marketId);
   if (!marketInfo) {
+    logger.error(`[${requestId}] Market not found: ${marketId}`);
     throw new Error(`Market not found: ${marketId}`);
   }
+  logger.debug(`[${requestId}] Market info retrieved:`, marketInfo);
 
-  const root = await generateRootQuestion(marketInfo);
+  logger.debug(`[${requestId}] Generating root question...`);
+  const root = await generateRootQuestion(marketInfo, requestId);
   if (!root) {
+    logger.error(`[${requestId}] Failed to generate root question`);
     throw new Error("Failed to generate root question");
   }
+  logger.debug(`[${requestId}] Root question generated:`, root);
 
   const treeData = {
     question: root.question,
@@ -360,18 +373,20 @@ async function generateQaTree(dbConnection, marketId, userId, options = {}) {
   };
 
   async function populateChildren(node, depth = 0) {
-    logger.debug(`Populating children at depth ${depth}`, {
+    const nodeId = crypto.randomUUID().slice(0, 8);
+    logger.debug(`[${requestId}][Node:${nodeId}] Populating children at depth ${depth}`, {
       parentQuestion: node.question,
       currentDepth: depth,
-      maxDepth
+      maxDepth,
+      timestamp: new Date().toISOString()
     });
     
     if (depth >= maxDepth) {
-      logger.debug('Max depth reached, stopping branch');
+      logger.debug(`[${requestId}][Node:${nodeId}] Max depth reached, stopping branch`);
       return;
     }
 
-    logger.debug('Generating sub-questions for:', node.question);
+    logger.debug(`[${requestId}][Node:${nodeId}] Generating sub-questions for:`, node.question);
     const subQuestions = await generateSubQuestions(
       { question: node.question, answer: node.answer },
       marketInfo,
@@ -387,8 +402,17 @@ async function generateQaTree(dbConnection, marketId, userId, options = {}) {
     }
   }
 
+  logger.debug(`[${requestId}] Starting tree population...`);
   await populateChildren(treeData);
-  return await saveQaTree(sql, userId, marketId, treeData);
+  
+  const elapsedTime = process.hrtime(startTime);
+  logger.info(`[${requestId}] Tree population completed in ${elapsedTime[0]}s ${elapsedTime[1]/1000000}ms`);
+  
+  logger.debug(`[${requestId}] Saving tree to database...`);
+  const savedTreeId = await saveQaTree(sql, userId, marketId, treeData);
+  logger.info(`[${requestId}] Tree saved successfully with ID: ${savedTreeId}`);
+  
+  return savedTreeId;
 }
 
 // Export all necessary functions and config
