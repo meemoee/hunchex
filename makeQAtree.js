@@ -16,8 +16,9 @@ const sql = require.main === module ? neon(process.env.DATABASE_URL) : null;
 
 // Logger setup
 const logger = {
-  debug: (...args) => console.log(new Date().toISOString(), '- DEBUG -', ...args),
-  error: (...args) => console.error(new Date().toISOString(), '- ERROR -', ...args)
+  debug: (...args) => console.log('\n' + '='.repeat(80) + '\n' + new Date().toISOString(), '- DEBUG -', ...args),
+  error: (...args) => console.error('\n' + '!'.repeat(80) + '\n' + new Date().toISOString(), '- ERROR -', ...args),
+  info: (...args) => console.log('\n' + '-'.repeat(80) + '\n' + new Date().toISOString(), '- INFO -', ...args)
 };
 // System prompts
 const PERPLEXITY_SYSTEM_PROMPT = `YOU ARE A PRECISE EXTRACTION MACHINE:
@@ -59,8 +60,9 @@ ZERO DEVIATION FROM SOURCE ALLOWED`;
 
 // Database functions
 async function getMarketInfo(dbConnection, marketId) {
-  logger.debug(`\nFetching market info for ID: ${marketId}`);
+  logger.debug(`Fetching market info for ID: ${marketId}`);
   try {
+    logger.debug('Executing SQL query...');
     const result = await sql`
       SELECT m.*, e.title as event_title 
       FROM markets m
@@ -77,18 +79,24 @@ async function getMarketInfo(dbConnection, marketId) {
       });
     }
     
+    logger.debug('Retrieved market info:', JSON.stringify(marketInfo, null, 2));
     return marketInfo;
   } catch (error) {
-    logger.error("Error fetching market info:", error);
+    logger.error("Error fetching market info:", error.message);
+    logger.error("Stack trace:", error.stack);
     throw error;
   }
 }
 
 // API interaction functions
 async function parseWithGemini(content) {
-  if (!content) return null;
+  if (!content) {
+    logger.error('No content provided for Gemini parsing');
+    return null;
+  }
 
-  console.log("\n--- GEMINI PARSING START ---");
+  logger.debug('Starting Gemini parsing with content length:', content.length);
+  logger.debug('Content preview:', content.substring(0, 200) + '...');
 
   const prompt = `
 VERBATIM EXTRACTION PROTOCOL:
@@ -160,9 +168,11 @@ EXTRACTION INSTRUCTIONS:
     }
 
     const fullResponse = collectedContent.join('');
+    logger.debug('Collected full response:', fullResponse);
     
     try {
       const parsed = JSON.parse(fullResponse);
+      logger.debug('Parsed QA pairs:', JSON.stringify(parsed.qa_pairs, null, 2));
       return parsed.qa_pairs || [];
     } catch (error) {
       return null;
@@ -282,6 +292,14 @@ async function saveQaTree(sql, auth0UserId, marketId, treeData) {
   const treeId = crypto.randomUUID();
   const now = new Date().toISOString();
   
+  logger.info('Saving QA tree:', {
+    treeId,
+    auth0UserId,
+    marketId,
+    timestamp: now,
+    treeDataSize: JSON.stringify(treeData).length
+  });
+  
   try {
     await sql`
       INSERT INTO qa_trees (
@@ -311,7 +329,20 @@ async function saveQaTree(sql, auth0UserId, marketId, treeData) {
 }
 
 async function generateQaTree(dbConnection, marketId, userId, options = {}) {
+  logger.info('Starting QA tree generation:', {
+    marketId,
+    userId,
+    options
+  });
+  
   const { maxDepth = config.DEFAULT_MAX_DEPTH, nodesPerLayer = config.DEFAULT_NODES_PER_LAYER } = options;
+  logger.debug('Using configuration:', {
+    maxDepth,
+    nodesPerLayer,
+    defaultMaxDepth: config.DEFAULT_MAX_DEPTH,
+    defaultNodesPerLayer: config.DEFAULT_NODES_PER_LAYER
+  });
+
   const marketInfo = await getMarketInfo(dbConnection, marketId);
   if (!marketInfo) {
     throw new Error(`Market not found: ${marketId}`);
@@ -329,8 +360,18 @@ async function generateQaTree(dbConnection, marketId, userId, options = {}) {
   };
 
   async function populateChildren(node, depth = 0) {
-    if (depth >= maxDepth) return;
+    logger.debug(`Populating children at depth ${depth}`, {
+      parentQuestion: node.question,
+      currentDepth: depth,
+      maxDepth
+    });
+    
+    if (depth >= maxDepth) {
+      logger.debug('Max depth reached, stopping branch');
+      return;
+    }
 
+    logger.debug('Generating sub-questions for:', node.question);
     const subQuestions = await generateSubQuestions(
       { question: node.question, answer: node.answer },
       marketInfo,
