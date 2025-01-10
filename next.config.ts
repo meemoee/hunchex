@@ -21,6 +21,16 @@ const nextConfig = {
         ]
       },
       {
+        source: '/api/qa-trees/generate',
+        destination: 'http://localhost:3001/api/qa-trees/generate',
+        has: [
+          {
+            type: 'header',
+            key: 'cookie',
+          }
+        ]
+      },
+      {
         source: '/api/qa-tree/:id',
         destination: 'http://localhost:3001/api/qa-tree/:id',
         has: [
