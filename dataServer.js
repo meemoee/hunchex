@@ -62,6 +62,7 @@ const {
     synthesizeResults 
 } = require('./LLMpandasSimple');
 const { Decimal } = require('decimal.js');
+const { generateQaTree } = require('./makeQAtree');
 const qaTreeRouter = require('./qaTreeRouter');
 
 const app = express();
@@ -72,6 +73,126 @@ app.use('/api', (req, res, next) => {
   console.log('Request to QA Tree Router:', req.method, req.url, req.headers);
   next();
 }, qaTreeRouter);
+
+// QA Tree Generation endpoint
+app.post('/api/qa-trees/generate', checkJwt, logSuccessfulAuth, async (req, res) => {
+  const requestId = uuidv4();
+  const startTime = Date.now();
+
+  // Log request details
+  console.log('=== QA TREE GENERATION REQUEST START ===', {
+    requestId,
+    method: req.method,
+    url: req.originalUrl,
+    userId: req.auth?.sub,
+    body: req.body,
+    timestamp: new Date().toISOString()
+  });
+
+  // Validate auth
+  if (!req.auth?.sub) {
+    console.error('=== QA TREE GENERATION AUTH ERROR ===', {
+      requestId,
+      error: 'Missing user ID in auth token',
+      timestamp: new Date().toISOString()
+    });
+    return res.status(401).json({ 
+      error: 'Authentication required',
+      requestId 
+    });
+  }
+
+  // Validate input parameters
+  const { marketId, maxDepth = 2, nodesPerLayer = 3 } = req.body;
+
+  if (!marketId) {
+    return res.status(400).json({
+      error: 'Market ID is required',
+      requestId
+    });
+  }
+
+  if (maxDepth < 1 || maxDepth > 5) {
+    return res.status(400).json({
+      error: 'maxDepth must be between 1 and 5',
+      requestId
+    });
+  }
+
+  if (nodesPerLayer < 1 || nodesPerLayer > 5) {
+    return res.status(400).json({
+      error: 'nodesPerLayer must be between 1 and 5',
+      requestId
+    });
+  }
+
+  try {
+    // Log generation attempt
+    console.log('=== QA TREE GENERATION STARTED ===', {
+      requestId,
+      userId: req.auth.sub,
+      marketId,
+      maxDepth,
+      nodesPerLayer,
+      timestamp: new Date().toISOString()
+    });
+
+    const treeId = await generateQaTree(
+      sql,
+      marketId,
+      req.auth.sub,
+      maxDepth,
+      nodesPerLayer
+    );
+
+    // Log successful generation
+    console.log('=== QA TREE GENERATION COMPLETE ===', {
+      requestId,
+      treeId,
+      executionTimeMs: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    });
+
+    // Set response headers
+    res.set({
+      'X-Request-ID': requestId,
+      'X-Response-Time': `${Date.now() - startTime}ms`
+    });
+
+    res.json({ 
+      treeId,
+      requestId,
+      executionTimeMs: Date.now() - startTime
+    });
+
+  } catch (error) {
+    // Detailed error logging
+    console.error('=== QA TREE GENERATION ERROR ===', {
+      requestId,
+      userId: req.auth.sub,
+      errorName: error.name,
+      errorMessage: error.message,
+      errorCode: error.code,
+      stack: error.stack,
+      totalTimeMs: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    });
+
+    // Set error response headers
+    res.set({
+      'X-Request-ID': requestId,
+      'X-Error-Code': error.code || 'UNKNOWN',
+      'X-Response-Time': `${Date.now() - startTime}ms`
+    });
+
+    // Send error response
+    res.status(500).json({
+      error: 'Failed to generate QA tree',
+      requestId,
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
 
 
 

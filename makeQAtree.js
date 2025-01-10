@@ -368,4 +368,11 @@ async function main() {
   }
 }
 
-main();
+// Only run main if called directly
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  generateQaTree
+};
