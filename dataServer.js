@@ -127,125 +127,7 @@ const checkJwt = auth({
   }
 });
 
-// QA Tree Generation endpoint
-app.post('/api/qa-trees/generate', checkJwt, logSuccessfulAuth, async (req, res) => {
-  const requestId = uuidv4();
-  const startTime = Date.now();
 
-  // Log request details
-  console.log('=== QA TREE GENERATION REQUEST START ===', {
-    requestId,
-    method: req.method,
-    url: req.originalUrl,
-    userId: req.auth?.sub,
-    body: req.body,
-    timestamp: new Date().toISOString()
-  });
-
-  // Validate auth
-  if (!req.auth?.sub) {
-    console.error('=== QA TREE GENERATION AUTH ERROR ===', {
-      requestId,
-      error: 'Missing user ID in auth token',
-      timestamp: new Date().toISOString()
-    });
-    return res.status(401).json({ 
-      error: 'Authentication required',
-      requestId 
-    });
-  }
-
-  // Validate input parameters
-  const { marketId, maxDepth = 2, nodesPerLayer = 3 } = req.body;
-
-  if (!marketId) {
-    return res.status(400).json({
-      error: 'Market ID is required',
-      requestId
-    });
-  }
-
-  if (maxDepth < 1 || maxDepth > 5) {
-    return res.status(400).json({
-      error: 'maxDepth must be between 1 and 5',
-      requestId
-    });
-  }
-
-  if (nodesPerLayer < 1 || nodesPerLayer > 5) {
-    return res.status(400).json({
-      error: 'nodesPerLayer must be between 1 and 5',
-      requestId
-    });
-  }
-
-  try {
-    // Log generation attempt
-    console.log('=== QA TREE GENERATION STARTED ===', {
-      requestId,
-      userId: req.auth.sub,
-      marketId,
-      maxDepth,
-      nodesPerLayer,
-      timestamp: new Date().toISOString()
-    });
-
-    const treeId = await generateQaTree(
-      sql,
-      marketId,
-      req.auth.sub,
-      maxDepth,
-      nodesPerLayer
-    );
-
-    // Log successful generation
-    console.log('=== QA TREE GENERATION COMPLETE ===', {
-      requestId,
-      treeId,
-      executionTimeMs: Date.now() - startTime,
-      timestamp: new Date().toISOString()
-    });
-
-    // Set response headers
-    res.set({
-      'X-Request-ID': requestId,
-      'X-Response-Time': `${Date.now() - startTime}ms`
-    });
-
-    res.json({ 
-      treeId,
-      requestId,
-      executionTimeMs: Date.now() - startTime
-    });
-
-  } catch (error) {
-    // Detailed error logging
-    console.error('=== QA TREE GENERATION ERROR ===', {
-      requestId,
-      userId: req.auth.sub,
-      errorName: error.name,
-      errorMessage: error.message,
-      errorCode: error.code,
-      stack: error.stack,
-      totalTimeMs: Date.now() - startTime,
-      timestamp: new Date().toISOString()
-    });
-
-    // Set error response headers
-    res.set({
-      'X-Request-ID': requestId,
-      'X-Error-Code': error.code || 'UNKNOWN',
-      'X-Response-Time': `${Date.now() - startTime}ms`
-    });
-
-    // Send error response
-    res.status(500).json({
-      error: 'Failed to generate QA tree',
-      requestId,
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
 
 // Middleware to log successful auth
 const logSuccessfulAuth = (req, res, next) => {
@@ -286,6 +168,66 @@ let kalshiTokens = {
   elections: { token: null, userId: null, timestamp: null },
   legacy: { token: null, userId: null, timestamp: null }
 };
+
+// In dataServer.js
+app.use(express.json()); // Ensure this is at the top of your middleware setup
+
+app.post('/api/qa-trees/generate', async (req, res) => {
+  console.log('=== QA TREE GENERATION REQUEST ===');
+  
+  // Log raw request data
+  let bodyData = '';
+  req.on('data', chunk => {
+    bodyData += chunk.toString();
+  });
+
+  req.on('end', async () => {
+    try {
+      console.log('Raw Request Body:', bodyData);
+      const parsedBody = JSON.parse(bodyData);
+      
+      console.log('Parsed Request Body:', parsedBody);
+
+      const marketId = parsedBody.marketId;
+      const maxDepth = parsedBody.maxDepth;
+      const nodesPerLayer = parsedBody.nodesPerLayer;
+
+      const auth0Id = req.headers['x-user-id'];
+
+      if (!auth0Id) {
+        return res.status(401).json({ error: 'Unauthorized - User ID required' });
+      }
+
+      if (!marketId) {
+        return res.status(400).json({ error: 'Market ID is required' });
+      }
+
+      const treeId = await generateQaTree(
+        sql, 
+        marketId, 
+        auth0Id, 
+        {
+          maxDepth: maxDepth || 2, 
+          nodesPerLayer: nodesPerLayer || 3
+        }
+      );
+
+      res.json({ 
+        treeId,
+        message: 'QA Tree generated successfully',
+        marketId,
+        userId: auth0Id
+      });
+
+    } catch (error) {
+      console.error('QA Tree Generation Error:', error);
+      res.status(500).json({ 
+        error: 'Failed to generate QA tree', 
+        details: error.message
+      });
+    }
+  });
+});
 
 async function authenticateKalshiLegacy() {
   try {
