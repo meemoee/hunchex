@@ -74,6 +74,59 @@ app.use('/api', (req, res, next) => {
   next();
 }, qaTreeRouter);
 
+
+
+const {
+  profileRoutes, 
+  getTopMovers,
+  saveTimelineResult,
+  getCachedData,
+  saveAnalysisResult,
+  setCachedData,
+  updateQuoteConfirmations,
+  updateTickerCache,
+  fetchAdditionalDetails,
+  findSimilarMarkets,
+  findSimilarEvents,
+  searchQuotes,
+  redis
+} = require('./serverUtils');
+
+
+
+const polyOrderbook = new PolyOrderbook();
+const sql = neon(process.env.DATABASE_URL);
+const orderManager = new OrderManager(sql, redis, polyOrderbook, broadcastToUser);
+
+// Auth0 configuration with enhanced logging
+const checkJwt = auth({
+  audience: process.env.AUTH0_AUDIENCE,
+  issuerBaseURL: process.env.AUTH0_ISSUER_BASE_URL,
+  tokenSigningAlg: 'RS256',
+  // Add logging for token validation
+  onRequestStart: (req) => {
+    console.log('=== AUTH0 REQUEST START ===', {
+      path: req.path,
+      method: req.method,
+      headers: {
+        ...req.headers,
+        authorization: req.headers.authorization ? '[REDACTED]' : undefined
+      },
+      timestamp: new Date().toISOString()
+    });
+  },
+  onRequestError: (err, req) => {
+    console.error('=== AUTH0 REQUEST ERROR ===', {
+      error: err.message,
+      code: err.status || 500,
+      path: req.path,
+      method: req.method,
+      timestamp: new Date().toISOString(),
+      stack: err.stack
+    });
+  }
+});
+
 // QA Tree Generation endpoint
 app.post('/api/qa-trees/generate', checkJwt, logSuccessfulAuth, async (req, res) => {
   const requestId = uuidv4();
@@ -190,59 +243,6 @@ app.post('/api/qa-trees/generate', checkJwt, logSuccessfulAuth, async (req, res)
       error: 'Failed to generate QA tree',
       requestId,
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
-
-
-
-const {
-  profileRoutes, 
-  getTopMovers,
-  saveTimelineResult,
-  getCachedData,
-  saveAnalysisResult,
-  setCachedData,
-  updateQuoteConfirmations,
-  updateTickerCache,
-  fetchAdditionalDetails,
-  findSimilarMarkets,
-  findSimilarEvents,
-  searchQuotes,
-  redis
-} = require('./serverUtils');
-
-
-
-const polyOrderbook = new PolyOrderbook();
-const sql = neon(process.env.DATABASE_URL);
-const orderManager = new OrderManager(sql, redis, polyOrderbook, broadcastToUser);
-
-// Auth0 configuration with enhanced logging
-const checkJwt = auth({
-  audience: process.env.AUTH0_AUDIENCE,
-  issuerBaseURL: process.env.AUTH0_ISSUER_BASE_URL,
-  tokenSigningAlg: 'RS256',
-  // Add logging for token validation
-  onRequestStart: (req) => {
-    console.log('=== AUTH0 REQUEST START ===', {
-      path: req.path,
-      method: req.method,
-      headers: {
-        ...req.headers,
-        authorization: req.headers.authorization ? '[REDACTED]' : undefined
-      },
-      timestamp: new Date().toISOString()
-    });
-  },
-  onRequestError: (err, req) => {
-    console.error('=== AUTH0 REQUEST ERROR ===', {
-      error: err.message,
-      code: err.status || 500,
-      path: req.path,
-      method: req.method,
-      timestamp: new Date().toISOString(),
-      stack: err.stack
     });
   }
 });
