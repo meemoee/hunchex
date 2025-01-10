@@ -3,17 +3,22 @@ const { neon } = require('@neondatabase/serverless');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
 
-const sql = neon(process.env.DATABASE_URL);
+// Configuration
+const config = {
+  OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+  OPENROUTER_URL: "https://openrouter.ai/api/v1/chat/completions",
+  DEFAULT_MAX_DEPTH: 2,
+  DEFAULT_NODES_PER_LAYER: 3
+};
+
+// Create DB connection only if running as script
+const sql = require.main === module ? neon(process.env.DATABASE_URL) : null;
 
 // Logger setup
 const logger = {
   debug: (...args) => console.log(new Date().toISOString(), '- DEBUG -', ...args),
   error: (...args) => console.error(new Date().toISOString(), '- ERROR -', ...args)
 };
-
-// Constants
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 // System prompts
 const PERPLEXITY_SYSTEM_PROMPT = `YOU ARE A PRECISE EXTRACTION MACHINE:
 
@@ -53,7 +58,7 @@ REQUIRED OUTPUT FORMAT:
 ZERO DEVIATION FROM SOURCE ALLOWED`;
 
 // Database functions
-async function getMarketInfo(sql, marketId) {
+async function getMarketInfo(dbConnection, marketId) {
   logger.debug(`\nFetching market info for ID: ${marketId}`);
   try {
     const result = await sql`
@@ -98,7 +103,7 @@ EXTRACTION INSTRUCTIONS:
 - DO NOT ALTER ORIGINAL WORDING`;
 
   const headers = {
-    "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+    "Authorization": `Bearer ${config.OPENROUTER_API_KEY}`,
     "Content-Type": "application/json"
   };
 
@@ -115,7 +120,7 @@ EXTRACTION INSTRUCTIONS:
   };
 
   try {
-    const response = await fetch(OPENROUTER_URL, {
+    const response = await fetch(config.OPENROUTER_URL, {
       method: 'POST',
       headers,
       body: JSON.stringify(data)
@@ -305,8 +310,9 @@ async function saveQaTree(sql, auth0UserId, marketId, treeData) {
   }
 }
 
-async function generateQaTree(sql, marketId, userId, maxDepth = 2) {
-  const marketInfo = await getMarketInfo(sql, marketId);
+async function generateQaTree(dbConnection, marketId, userId, options = {}) {
+  const { maxDepth = config.DEFAULT_MAX_DEPTH, nodesPerLayer = config.DEFAULT_NODES_PER_LAYER } = options;
+  const marketInfo = await getMarketInfo(dbConnection, marketId);
   if (!marketInfo) {
     throw new Error(`Market not found: ${marketId}`);
   }
@@ -344,35 +350,49 @@ async function generateQaTree(sql, marketId, userId, maxDepth = 2) {
   return await saveQaTree(sql, userId, marketId, treeData);
 }
 
-// Parse command line arguments
-const args = process.argv.slice(2);
-const marketId = args[0];
-const maxDepth = parseInt(args[1]) || 2;
-const nodesPerLayer = parseInt(args[2]) || 3;
-const userId = 'google-oauth2|118350871750711913024';
+// Export all necessary functions and config
+module.exports = {
+  generateQaTree,
+  generateRootQuestion,
+  generateSubQuestions,
+  parseWithGemini,
+  saveQaTree,
+  config
+};
 
-if (!marketId) {
-  console.error('Usage: node makeQAtree.js <marketId> [maxDepth] [nodesPerLayer]');
-  process.exit(1);
-}
-
-// Main execution
-async function main() {
-  try {
-    console.log('DATABASE_URL:', process.env.DATABASE_URL);
-    const treeId = await generateQaTree(sql, marketId, userId, maxDepth, nodesPerLayer);
-    console.log('Successfully generated QA tree with ID:', treeId);
-  } catch (error) {
-    console.error('Error generating QA tree:', error);
+// CLI handling
+if (require.main === module) {
+  const args = process.argv.slice(2);
+  const marketId = args[0];
+  const maxDepth = parseInt(args[1]) || config.DEFAULT_MAX_DEPTH;
+  const nodesPerLayer = parseInt(args[2]) || config.DEFAULT_NODES_PER_LAYER;
+  
+  if (!marketId) {
+    console.error('Usage: node makeQAtree.js <marketId> [maxDepth] [nodesPerLayer]');
     process.exit(1);
   }
-}
 
-// Only run main if called directly
-if (require.main === module) {
-  main();
-}
+  // Demo user ID for CLI usage
+  const demoUserId = process.env.DEMO_USER_ID || 'cli-user';
 
-module.exports = {
-  generateQaTree
-};
+  (async () => {
+    try {
+      console.log('Generating QA tree with parameters:', {
+        marketId,
+        maxDepth,
+        nodesPerLayer,
+        userId: demoUserId
+      });
+
+      const treeId = await generateQaTree(sql, marketId, demoUserId, {
+        maxDepth,
+        nodesPerLayer
+      });
+
+      console.log('Successfully generated QA tree with ID:', treeId);
+    } catch (error) {
+      console.error('Error generating QA tree:', error);
+      process.exit(1);
+    }
+  })();
+}
