@@ -73,6 +73,13 @@ interface ExpansionModal {
   questionsPerLayer: number
 }
 
+interface GenerationModal {
+  isOpen: boolean
+  maxDepth: number
+  nodesPerLayer: number
+  isGenerating: boolean
+}
+
 interface TreeNode {
   name: string
   attributes: {
@@ -114,6 +121,12 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
   const [selectedSavedTree, setSelectedSavedTree] = useState<string | null>(null)
   const [isSavedTreesOpen, setIsSavedTreesOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [generationModal, setGenerationModal] = useState<GenerationModal>({
+    isOpen: false,
+    maxDepth: 2,
+    nodesPerLayer: 3,
+    isGenerating: false
+  })
   const [editingTreeTitle, setEditingTreeTitle] = useState<{
     treeId: string | null
     title: string
@@ -320,6 +333,55 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
   }
 
   // Edit a saved tree's title
+  const handleGenerateTree = async () => {
+    setGenerationModal(prev => ({ ...prev, isGenerating: true }));
+    try {
+      // Get access token
+      const tokenResponse = await fetch('/api/auth/token');
+      if (!tokenResponse.ok) {
+        throw new Error('Failed to get access token');
+      }
+      const { token } = await tokenResponse.json();
+
+      // Call generate endpoint
+      const response = await fetch('/api/qa-trees/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          marketId,
+          maxDepth: generationModal.maxDepth,
+          nodesPerLayer: generationModal.nodesPerLayer
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to generate tree');
+      }
+
+      const { treeId } = await response.json();
+      
+      // Load the newly generated tree
+      await loadSavedTree(treeId);
+      
+      // Close modal and show success
+      setGenerationModal(prev => ({ ...prev, isOpen: false }));
+      toast.success('Tree generated successfully');
+      
+      // Refresh saved trees list
+      await fetchSavedTrees();
+      
+    } catch (error) {
+      console.error('Error generating tree:', error);
+      toast.error(error.message || 'Failed to generate tree');
+    } finally {
+      setGenerationModal(prev => ({ ...prev, isGenerating: false }));
+    }
+  };
+
   const updateTreeTitle = async () => {
     if (!editingTreeTitle.treeId) return
     
@@ -425,6 +487,14 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
           title="Save Tree"
         >
           <Save className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => setGenerationModal(prev => ({ ...prev, isOpen: true }))}
+          disabled={isLoading || !user}
+          className="p-2 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50"
+          title="Generate New Tree"
+        >
+          <GitBranch className="w-4 h-4" />
         </button>
       </div>
 
@@ -852,6 +922,68 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
                   className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600"
                 >
                   Generate
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Generation Modal */}
+        {generationModal.isOpen && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+              <h3 className="text-lg font-bold mb-4">
+                Generate QA Tree
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Maximum Depth</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="5"
+                    value={generationModal.maxDepth}
+                    onChange={(e) => setGenerationModal(prev => ({
+                      ...prev,
+                      maxDepth: Math.min(5, Math.max(1, parseInt(e.target.value) || 1))
+                    }))}
+                    disabled={generationModal.isGenerating}
+                    className="w-full p-2 bg-gray-700 rounded disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Nodes per Layer</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="5"
+                    value={generationModal.nodesPerLayer}
+                    onChange={(e) => setGenerationModal(prev => ({
+                      ...prev,
+                      nodesPerLayer: Math.min(5, Math.max(1, parseInt(e.target.value) || 1))
+                    }))}
+                    disabled={generationModal.isGenerating}
+                    className="w-full p-2 bg-gray-700 rounded disabled:opacity-50"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end space-x-2 mt-6">
+                <button
+                  onClick={() => setGenerationModal(prev => ({ ...prev, isOpen: false }))}
+                  disabled={generationModal.isGenerating}
+                  className="px-4 py-2 bg-gray-600 rounded hover:bg-gray-500 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleGenerateTree}
+                  disabled={generationModal.isGenerating}
+                  className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {generationModal.isGenerating && (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  )}
+                  {generationModal.isGenerating ? 'Generating...' : 'Generate'}
                 </button>
               </div>
             </div>
