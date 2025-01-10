@@ -12,11 +12,23 @@ const nextConfig = {
       },
       {
         source: '/api/qa-trees',
-        destination: 'http://localhost:3001/api/qa-trees'
+        destination: 'http://localhost:3001/api/qa-trees',
+        has: [
+          {
+            type: 'header',
+            key: 'cookie',
+          }
+        ]
       },
       {
         source: '/api/qa-tree/:id',
-        destination: 'http://localhost:3001/api/qa-tree/:id'
+        destination: 'http://localhost:3001/api/qa-tree/:id',
+        has: [
+          {
+            type: 'header',
+            key: 'cookie',
+          }
+        ]
       },
       {
         source: '/api/chat',
@@ -35,7 +47,8 @@ const nextConfig = {
         headers: [
           { key: 'Access-Control-Allow-Origin', value: '*' },
           { key: 'Access-Control-Allow-Methods', value: 'GET,POST,PUT,DELETE,OPTIONS' },
-          { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization' },
+          { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization, Cookie' },
+          { key: 'Access-Control-Allow-Credentials', value: 'true' }
         ]
       }
     ]
