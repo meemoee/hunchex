@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useWebSocket } from '@/lib/websocket'
 import { Bell, Menu, ChevronLeft } from 'lucide-react'
 import { type TopMover } from '@/types/mover'
@@ -70,22 +70,22 @@ export default function MoversListPage() {
   const [isLoadingUserData, setIsLoadingUserData] = useState(false)
 
 
-  const fetchBalance = async () => {
-    if (!user) return false
-    try {
-      const response = await fetch('/api/balance')
-      const data = await response.json()
-      if (response.ok) {
-        const newBalance = Number(data.balance)
-        setBalance(newBalance)
-        return true
-      }
-      return false
-    } catch (error) {
-      console.error('Balance fetch error:', error)
-      return false
-    }
-  }
+  const fetchBalance = useCallback(async () => {
+	  if (!user) return false
+	  try {
+		const response = await fetch('/api/balance')
+		const data = await response.json()
+		if (response.ok) {
+		  const newBalance = Number(data.balance)
+		  setBalance(newBalance)
+		  return true
+		}
+		return false
+	  } catch (error) {
+		console.error('Balance fetch error:', error)
+		return false
+	  }
+	}, [user])
 
   const fetchActiveOrders = async () => {
     if (!user) return false
@@ -196,17 +196,16 @@ export default function MoversListPage() {
   }
 
   useEffect(() => {
-    calculateTotalValue()
-  }, [balance, holdings])
+	  calculateTotalValue()
+	}, [balance, holdings, calculateTotalValue])
 
-  useEffect(() => {
-    if (user) {
-      // Initial data load
-      fetchHoldings()
-      fetchBalance()
-      fetchActiveOrders()
-    }
-  }, [user])
+	useEffect(() => {
+	  if (user) {
+		fetchHoldings()
+		fetchBalance()
+		fetchActiveOrders()
+	  }
+	}, [user, fetchHoldings, fetchBalance, fetchActiveOrders])
 
   const { socket, isConnected, subscribeToUpdates } = useWebSocket()
 
@@ -248,6 +247,14 @@ export default function MoversListPage() {
       }
     })
   }, [socket, isConnected, subscribeToUpdates])
+  
+  interface PriceUpdateData {
+  market_id: string;
+  last_traded_price: number;
+  yes_price: number;
+  no_price: number;
+  volume: number;
+}
 
   const updateMoverData = (updateData: any) => {
     setTopMovers(prevMovers => {
