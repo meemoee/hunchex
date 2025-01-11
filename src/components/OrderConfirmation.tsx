@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useUser } from '@auth0/nextjs-auth0/client'
 import { type TopMover } from '@/types/mover'
+import Image from 'next/image'
 
 // Color interpolation helper
 const interpolateColor = (percentage: number): string => {
@@ -306,10 +307,12 @@ export function OrderConfirmation({
         <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-[9999]">
       <div className="bg-[#1a1b1e] w-[90%] max-w-[500px] rounded-lg p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex items-start gap-4">
-          <img
+          <Image
             src={mover.image}
             alt=""
-            className="w-14 h-14 rounded-lg object-cover"
+            width={56}
+            height={56}
+            className="rounded-lg object-cover"
           />
           <div>
             <div className="flex items-center gap-2 mb-2">
