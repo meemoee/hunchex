@@ -435,7 +435,7 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
   }
 
   // Update node question
-  const updateNodeDetails = (newQuestion: string, existingAnswer: string) => {
+  const updateNodeDetails = (newQuestion: string) => {
     if (!editingNode) return
 
     const updateNode = (node: QANode): QANode => {
@@ -645,10 +645,7 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
                 <button
                   onClick={(e) => {
                     const questionInput = e.currentTarget.parentElement?.previousElementSibling as HTMLInputElement
-                    updateNodeDetails(
-                      questionInput.value,
-                      editingNode.attributes.answer
-                    )
+                    updateNodeDetails(questionInput.value)
                   }}
                   className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600"
                 >
