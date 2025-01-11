@@ -247,7 +247,6 @@ export function OrderConfirmation({
 
   // Save scroll position when user scrolls
   const handleScroll = () => {
-    const container = orderbookRef.current
     // Keep empty handler to maintain scroll event listener
   }
 
