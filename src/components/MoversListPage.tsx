@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useWebSocket } from '@/lib/websocket'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Bell, Menu, ChevronLeft } from 'lucide-react'
 import { type TopMover } from '@/types/mover'
 import dynamic from 'next/dynamic'
@@ -402,10 +403,12 @@ export default function MoversListPage() {
               {user ? (
                 <>
                   <div className="flex flex-col items-center mb-6">
-                    <img 
+                    <Image 
                       src={user.picture || "/images/default-avatar.png"}
                       alt={`${user.name}'s profile`}
-                      className="w-30 h-30 rounded-full mb-2"
+                      width={120}
+                      height={120}
+                      className="rounded-full mb-2"
                     />
                     <h2 className="text-xl font-bold mb-2">{user.name}</h2>
                     <p className="text-sm text-gray-400">{user.email}</p>
@@ -513,11 +516,13 @@ export default function MoversListPage() {
                     ) : holdings.map((holding, index) => (
                       <div key={index} className="mb-4 p-2 bg-gray-800 rounded">
                         <div className="flex items-center gap-3">
-                          <img
+                          <Image
                             src={holding.image && holding.image !== '0' && holding.image !== 'null' && holding.image !== '' ? 
                               holding.image : '/images/placeholder.png'}
-                            alt=""
-                            className="w-8 h-8 rounded object-cover flex-shrink-0"
+                            alt="Market image"
+                            width={32}
+                            height={32}
+                            className="rounded object-cover flex-shrink-0"
                           />
                           <p className="font-semibold text-sm">{holding.question || 'Unknown Market'}</p>
                         </div>
@@ -547,10 +552,12 @@ export default function MoversListPage() {
                       <div key={index} className="mb-4 p-2 bg-gray-800 rounded">
                         <div className="flex justify-between items-start">
                           <div className="flex items-center gap-3">
-                            <img
+                            <Image
                               src={order.image || '/images/placeholder.png'}
-                              alt=""
-                              className="w-8 h-8 rounded object-cover flex-shrink-0"
+                              alt="Order image"
+                              width={32}
+                              height={32}
+                              className="rounded object-cover flex-shrink-0"
                             />
                             <p className="font-semibold text-sm">{order.question}</p>
                           </div>
