@@ -260,7 +260,7 @@ export default function MoversListPage() {
 		pageSize, 
 		search, 
 		interval: selectedInterval, 
-		openOnly 
+		openMarketsOnly  // Changed from openOnly to openMarketsOnly to match state variable
 	  });
 	  
 	  setError(null);
