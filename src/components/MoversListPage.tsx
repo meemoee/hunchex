@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useWebSocket } from '@/lib/websocket'
+import Link from 'next/link'
 import { Bell, Menu, ChevronLeft } from 'lucide-react'
 import { type TopMover } from '@/types/mover'
 import dynamic from 'next/dynamic'
@@ -594,23 +595,23 @@ export default function MoversListPage() {
                       </div>
                     ))}
 
-                    <a 
+                    <Link 
                       href="/api/auth/logout"
                       className="block w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors mt-4 text-center"
                     >
                       Logout
-                    </a>
+                    </Link>
                   </div>
                 </>
               ) : (
                 <div className="text-center pt-8">
                   <p className="mb-4 text-gray-400">Please log in to continue</p>
-                  <a 
+                  <Link 
                     href="/api/auth/login"
                     className="block w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
                   >
                     Login
-                  </a>
+                  </Link>
                 </div>
               )}
             </div>
