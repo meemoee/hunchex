@@ -227,8 +227,6 @@ export function OrderConfirmation({
     onPriceChange(clickedPrice)
   }
 
-  const [lastScrollTop, setLastScrollTop] = useState(0)
-
   const centerSpread = (): boolean => {
     const container = orderbookRef.current
     if (!container || !orderbook) return false
@@ -253,16 +251,13 @@ export function OrderConfirmation({
     const relativeSpreadPoint = spreadPoint - containerRect.top
     
     container.scrollTop = relativeSpreadPoint - (containerRect.height / 2)
-    setLastScrollTop(container.scrollTop)
     return true
   }
 
   // Save scroll position when user scrolls
   const handleScroll = () => {
     const container = orderbookRef.current
-    if (container) {
-      setLastScrollTop(container.scrollTop)
-    }
+    // Keep empty handler to maintain scroll event listener
   }
 
   const [hasInitiallyCentered, setHasInitiallyCentered] = useState(false)
