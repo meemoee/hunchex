@@ -67,7 +67,6 @@ type OrderConfirmationProps = {
   onClose: () => void
   onAmountChange: (value: string) => void
   onPriceChange: (value: number) => void
-  onConfirm: () => void
   onOrderSuccess: () => void
   onRefreshUserData: () => void
   orderStatus: {
@@ -97,7 +96,6 @@ export function OrderConfirmation({
   onClose,
   onAmountChange,
   onPriceChange,
-  onConfirm,
   onOrderSuccess,
   onRefreshUserData,
   orderStatus,
