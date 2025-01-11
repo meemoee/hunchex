@@ -418,8 +418,12 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
   // Prepare tree data for rendering
   const treeData = useMemo(() => transformData(qaData), [qaData, transformData])
 
+  interface NodeData {
+    data: TreeNode
+  }
+
   // Node click handler
-  const handleNodeClick = (nodeData: any) => {
+  const handleNodeClick = (nodeData: NodeData) => {
     setSelectedNode(nodeData.data)
     setEditingNode(null)
   }
