@@ -187,7 +187,7 @@ export default function MoversListPage() {
     }
   }, [user]);
 
-  const calculateTotalValue = () => {
+  const calculateTotalValue = useCallback(() => {
     const holdingsValue = holdings.reduce((total, holding) => {
       const amount = parseFloat(holding.amount) || 0
       const price = parseFloat(holding.current_price || '0')
@@ -195,11 +195,11 @@ export default function MoversListPage() {
     }, 0)
 
     setTotalValue(balance + holdingsValue)
-  }
+  }, [holdings, balance])
 
   useEffect(() => {
-	  calculateTotalValue()
-	}, [balance, holdings, calculateTotalValue])
+    calculateTotalValue()
+  }, [calculateTotalValue])
 
 	useEffect(() => {
 	  if (user) {
@@ -258,7 +258,7 @@ export default function MoversListPage() {
   volume: number;
 }
 
-  const updateMoverData = (updateData: any) => {
+  const updateMoverData = (updateData: PriceUpdateData) => {
     setTopMovers(prevMovers => {
       const index = prevMovers.findIndex(m => m.market_id === updateData.market_id)
       if (index === -1) return prevMovers
