@@ -268,68 +268,71 @@ export default function MoversListPage() {
   }
 
   const fetchTopMovers = async (page = 1, pageSize = 10, search = '', openOnly = false) => {
-	  console.log('Full Fetch Top Movers Debug:', { 
+	  console.log('Starting fetch:', { 
 		page, 
 		pageSize, 
 		search, 
 		interval: selectedInterval, 
 		openOnly 
 	  });
-
-	  setError(null)
+	  
+	  setError(null);
 	  if (page === 1) {
-		setIsLoadingMovers(true)
+		setIsLoadingMovers(true);
 	  } else {
-		setIsLoadingMore(true)
+		setIsLoadingMore(true);
 	  }
 	  
 	  try {
-		const url = `/api/top_movers?interval=${selectedInterval}&page=${page}&pageSize=${pageSize}&search=${encodeURIComponent(search)}&openOnly=${openMarketsOnly}`
-		console.log('Fetch URL:', url)
+		const url = `/api/top_movers?interval=${selectedInterval}&page=${page}&pageSize=${pageSize}&search=${encodeURIComponent(search)}&openOnly=${openMarketsOnly}`;
+		console.log('Fetch URL:', url);
 		
-		const response = await fetch(url)
-		
-		console.log('Full Response Object:', response);
-		console.log('Response Status:', response.status)
-		console.log('Response Headers:', Object.fromEntries(response.headers.entries()))
+		const response = await fetch(url);
+		console.log('Response Status:', response.status);
 		
 		if (!response.ok) {
-		  const errorText = await response.text()
-		  console.error('Error Response Text:', errorText)
-		  throw new Error(`Failed to fetch top movers: ${errorText}`)
+		  const errorText = await response.text();
+		  console.error('Error Response:', errorText);
+		  throw new Error(`Failed to fetch: ${errorText}`);
 		}
 		
-		const data = await response.json()
-		console.log('Raw Received Data:', data)
-		console.log('Number of Movers Received:', data.length)
+		const data = await response.json();
+		console.log('Raw Response Data:', data);
 		
-		const processedMovers = data.map((mover: TopMover) => ({
-		  ...mover,
-		  volume: mover.volume || 0,
-		  volume_change: mover.volume_change || 0,
-		  volume_change_percentage: mover.volume_change_percentage || 0,
-		}))
+		// Validate each mover has required fields
+		const processedMovers = data.map((mover, index) => {
+		  if (!mover.market_id) {
+			console.error('Missing market_id for mover:', index, mover);
+		  }
+		  return {
+			...mover,
+			market_id: mover.market_id || mover.id, // Fallback to id if market_id missing
+			volume: mover.volume || 0,
+			volume_change: mover.volume_change || 0,
+			volume_change_percentage: mover.volume_change_percentage || 0,
+		  };
+		});
 
-		console.log('Processed Movers:', processedMovers)
+		console.log('Processed Movers:', processedMovers);
 
 		if (page === 1) {
-		  setTopMovers(processedMovers)
+		  setTopMovers(processedMovers);
 		} else {
-		  setTopMovers(prev => [...prev, ...processedMovers])
+		  setTopMovers(prev => [...prev, ...processedMovers]);
 		}
 		
-		setHasMore(processedMovers.length === pageSize)
-	  } catch (err) {
-		console.error('Complete Fetch Error:', err)
-		setError('Failed to fetch top movers. Please try again.')
+		setHasMore(processedMovers.length === pageSize);
+	  } catch (error) {
+		console.error('Complete Fetch Error:', error);
+		setError('Failed to fetch top movers. Please try again.');
 	  } finally {
 		if (page === 1) {
-		  setIsLoadingMovers(false)
+		  setIsLoadingMovers(false);
 		} else {
-		  setIsLoadingMore(false)
+		  setIsLoadingMore(false);
 		}
 	  }
-	}
+	};
 
   useEffect(() => {
     fetchTopMovers(1, 10)

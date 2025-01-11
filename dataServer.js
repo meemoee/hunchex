@@ -174,85 +174,55 @@ app.use(express.json()); // Ensure this is at the top of your middleware setup
 
 app.post('/api/qa-trees/generate', async (req, res) => {
   const requestId = crypto.randomUUID();
-  console.log(`=== QA TREE GENERATION REQUEST (${requestId}) ===`);
-  console.log('Timestamp:', new Date().toISOString());
-  
-  // Log raw request data
-  let bodyData = '';
-  req.on('data', chunk => {
-    bodyData += chunk.toString();
-    console.log(`Received chunk of size: ${chunk.length} bytes`);
-  });
+  console.log('=== FULL REQUEST DATA ===');
+  console.log('Headers:', req.headers);
+  console.log('Body:', req.body);
+  console.log('Auth0 User ID:', req.headers['x-user-id']);
 
-  req.on('end', async () => {
-    try {
-      console.log(`=== PROCESSING REQUEST ${requestId} ===`);
-      console.log('Raw Request Body:', bodyData);
-      console.log('Request Headers:', req.headers);
-      
-      const parsedBody = JSON.parse(bodyData);
-      console.log('Parsed Request Body:', parsedBody);
+  try {
+    const { marketId, maxDepth = 2, nodesPerLayer = 3 } = req.body;
+    
+    // Validate inputs with VERY VERBOSE logging
+    console.log('Validated Inputs:', {
+      marketId,
+      maxDepth,
+      nodesPerLayer,
+      userIdPresent: !!req.headers['x-user-id']
+    });
 
-      const marketId = parsedBody.marketId;
-      const maxDepth = parsedBody.maxDepth;
-      const nodesPerLayer = parsedBody.nodesPerLayer;
-      const auth0Id = req.headers['x-user-id'];
-
-      console.log('Validated Parameters:', {
-        marketId,
-        maxDepth,
-        nodesPerLayer,
-        auth0Id,
-        requestId
-      });
-
-      if (!auth0Id) {
-        console.error(`${requestId} - Authentication Error: Missing user ID`);
-        return res.status(401).json({ error: 'Unauthorized - User ID required' });
-      }
-
-      if (!marketId) {
-        console.error(`${requestId} - Validation Error: Missing market ID`);
-        return res.status(400).json({ error: 'Market ID is required' });
-      }
-
-      console.log(`${requestId} - Starting QA Tree generation...`);
-      console.time(`qa-tree-generation-${requestId}`);
-
-      const treeId = await generateQaTree(
-        sql, 
-        marketId, 
-        auth0Id, 
-        {
-          maxDepth: maxDepth || 2, 
-          nodesPerLayer: nodesPerLayer || 3,
-          requestId // Pass requestId to track the full process
-        }
-      );
-
-      console.timeEnd(`qa-tree-generation-${requestId}`);
-      console.log(`${requestId} - QA Tree generation completed successfully`);
-
-      const response = { 
-        treeId,
-        message: 'QA Tree generated successfully',
-        marketId,
-        userId: auth0Id,
-        requestId,
-        generationTime: process.hrtime()
-      };
-
-      console.log(`${requestId} - Sending response:`, response);
-      res.json(response);
-
-    } catch (error) {
-      console.error('QA Tree Generation Error:', error);
-      res.status(500).json({ 
-        error: 'Failed to generate QA tree', 
-        details: error.message
-      });
+    if (!marketId) {
+      console.error('CRITICAL: No Market ID provided');
+      return res.status(400).json({ error: 'Market ID is required' });
     }
-  });
+
+    const result = await generateQaTree(
+      sql, 
+      marketId, 
+      req.headers['x-user-id'], 
+      {
+        maxDepth, 
+        nodesPerLayer,
+        requestId
+      }
+    );
+
+    console.log('QA Tree Generation Result:', result);
+    res.json({ treeId: result });
+
+  } catch (error) {
+    console.error('COMPREHENSIVE ERROR DETAILS:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      cause: error.cause,
+      code: error.code
+    });
+    res.status(500).json({ 
+      error: 'Failed to generate QA tree', 
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
 });
 
 async function authenticateKalshiLegacy() {

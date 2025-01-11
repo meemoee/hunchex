@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useUser } from '@auth0/nextjs-auth0/client'
 import { type TopMover } from '@/types/mover'
-import { useWebSocket } from '@/lib/websocket'
 
 // Color interpolation helper
 const interpolateColor = (percentage: number): string => {
@@ -64,7 +63,7 @@ type OrderConfirmationProps = {
   selectedOutcome: string
   amount: string
   price: number
-  initialOrderbook?: OrderbookData | null
+  orderbook: OrderbookData | null
   onClose: () => void
   onAmountChange: (value: string) => void
   onPriceChange: (value: number) => void
@@ -94,7 +93,7 @@ export function OrderConfirmation({
   selectedOutcome,
   amount,
   price,
-  initialOrderbook,
+  orderbook,
   onClose,
   onAmountChange,
   onPriceChange,
@@ -192,38 +191,36 @@ export function OrderConfirmation({
 
   // Get effective price considering market order threshold
   const getEffectivePrice = (inputPrice: number): number => {
-    if (!localOrderbook?.data) return inputPrice
+    if (!orderbook?.data) return inputPrice
     
     if (action === 'buy') {
-      const lowestAsk = localOrderbook.data.asks[0]?.price
+      const lowestAsk = orderbook.data.asks[0]?.price
       return inputPrice >= lowestAsk ? lowestAsk : inputPrice
     } else {
-      const highestBid = localOrderbook.data.bids[0]?.price
+      const highestBid = orderbook.data.bids[0]?.price
       return inputPrice <= highestBid ? highestBid : inputPrice
     }
   }
 
   // Determine order type based on price and orderbook
   const updateOrderType = (currentPrice: number) => {
-    if (!localOrderbook?.data) return
+    if (!orderbook?.data) return
     
     if (action === 'buy') {
       // For buy orders: if price >= lowest ask, it's a market order
-      const lowestAsk = localOrderbook.data.asks[0]?.price
+      const lowestAsk = orderbook.data.asks[0]?.price
       setOrderType(currentPrice >= lowestAsk ? 'market' : 'limit')
     } else {
       // For sell orders: if price <= highest bid, it's a market order
-      const highestBid = localOrderbook.data.bids[0]?.price
+      const highestBid = orderbook.data.bids[0]?.price
       setOrderType(currentPrice <= highestBid ? 'market' : 'limit')
     }
   }
 
   // Update order type whenever price changes
   useEffect(() => {
-    if (localOrderbook?.data) {
-      updateOrderType(price)
-    }
-  }, [price, localOrderbook?.data ?? null, action])
+    updateOrderType(price)
+  }, [price, orderbook, action])
 
   const orderbookRef = useRef<HTMLDivElement>(null)
   const previousScrollPosition = useRef(0)
@@ -236,7 +233,7 @@ export function OrderConfirmation({
 
   const centerSpread = (): boolean => {
     const container = orderbookRef.current
-    if (!container || !localOrderbook) return false
+    if (!container || !orderbook) return false
 
     const content = container.querySelector('.orderbook-content')
     if (!content) return false
@@ -270,41 +267,10 @@ export function OrderConfirmation({
     }
   }
 
-  const [localOrderbook, setLocalOrderbook] = useState<OrderbookData | null>(initialOrderbook || null)
   const [hasInitiallyCentered, setHasInitiallyCentered] = useState(false)
-  const { socket, isConnected, subscribeToMarket, unsubscribeFromMarket, subscribeToUpdates } = useWebSocket()
-
-  // Handle WebSocket subscription
-  useEffect(() => {
-    if (!isOpen || !mover || !isConnected) return
-
-    console.log('Subscribing to market orderbook:', mover.market_id)
-    subscribeToMarket(mover.market_id)
-
-    const unsubscribe = subscribeToUpdates((type, data) => {
-      if (type === 'orderbook_update' && data.market_id === mover.market_id) {
-        console.log('Received orderbook update:', data)
-        setLocalOrderbook(prevBook => ({
-          ...prevBook,
-          data: {
-            asks: data.asks || prevBook?.data.asks || [],
-            bids: data.bids || prevBook?.data.bids || [],
-            spread: data.spread ?? prevBook?.data.spread ?? null,
-            mid: data.mid ?? prevBook?.data.mid ?? null
-          }
-        }))
-      }
-    })
-
-    return () => {
-      console.log('Unsubscribing from market orderbook:', mover.market_id)
-      unsubscribeFromMarket(mover.market_id)
-      unsubscribe()
-    }
-  }, [isOpen, mover, isConnected, subscribeToMarket, unsubscribeFromMarket, subscribeToUpdates])
 
   useEffect(() => {
-    if (isOpen && localOrderbook && !hasInitiallyCentered) {
+    if (isOpen && orderbook && !hasInitiallyCentered) {
       // Add a small delay to ensure DOM is ready
       const timer = setTimeout(() => {
         const success = centerSpread()
@@ -318,7 +284,7 @@ export function OrderConfirmation({
       }, 100)
       return () => clearTimeout(timer)
     }
-  }, [isOpen, localOrderbook, hasInitiallyCentered, balance, balancePercentage, price, onAmountChange])
+  }, [isOpen, orderbook, hasInitiallyCentered, balance, balancePercentage, price, onAmountChange])
 
   useEffect(() => {
     if (!isOpen) {
@@ -611,22 +577,22 @@ export function OrderConfirmation({
           </div>
         </div>
 
-        {localOrderbook && (
+        {orderbook && (
           <div className="mt-4">
             <div className="flex justify-center space-x-8 mb-4">
               <div className="text-center">
                 <span className="text-xs text-gray-400 block">spread</span>
                 <span className="text-sm">
-                  {localOrderbook.data.spread !== null ? 
-                    formatNumber(localOrderbook.data.spread * 100, 3) + '%' : 
+                  {orderbook.data.spread !== null ? 
+                    formatNumber(orderbook.data.spread * 100, 3) + '%' : 
                     '-'}
                 </span>
               </div>
               <div className="text-center">
                 <span className="text-xs text-gray-400 block">mid</span>
                 <span className="text-sm">
-                  {localOrderbook.data.mid !== null ? 
-                    formatNumber(localOrderbook.data.mid * 100, 3) + '%' : 
+                  {orderbook.data.mid !== null ? 
+                    formatNumber(orderbook.data.mid * 100, 3) + '%' : 
                     '-'}
                 </span>
               </div>
@@ -644,7 +610,7 @@ export function OrderConfirmation({
               onScroll={handleScroll}
             >
               <div className="orderbook-content">
-                {localOrderbook.data.asks.slice().reverse().map((ask, i) => (
+                {orderbook.data.asks.slice().reverse().map((ask, i) => (
                   <button
                     key={`ask-${i}`}
                     className="orderbook-row ask-row grid grid-cols-3 text-center py-1 w-full hover:bg-white/5 text-red-500"
@@ -664,7 +630,7 @@ export function OrderConfirmation({
                   </button>
                 ))}
 
-                {localOrderbook.data.bids.map((bid, i) => (
+                {orderbook.data.bids.map((bid, i) => (
                   <button
                     key={`bid-${i}`}
                     className="orderbook-row bid-row grid grid-cols-3 text-center py-1 w-full hover:bg-white/5 text-green-500"

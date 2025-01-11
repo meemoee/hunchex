@@ -1,85 +1,54 @@
-import { neon } from '@neondatabase/serverless';
-import { getSession } from '@auth0/nextjs-auth0';
+// src/app/api/qa-trees/route.ts
 import { NextResponse } from 'next/server';
+import { getSession } from '@auth0/nextjs-auth0/edge';
+import { neon } from '@neondatabase/serverless';
 
 const sql = neon(process.env.DATABASE_URL!);
 
 export async function GET(request: Request) {
+  console.log('=== GET /api/qa-trees START ===');
+  
   try {
     const session = await getSession();
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = session.user.sub;
     const { searchParams } = new URL(request.url);
     const marketId = searchParams.get('marketId');
 
-    console.log('Request details:', {
-      userId,
-      marketId,
-      url: request.url,
-      timestamp: new Date().toISOString()
-    });
-
-    // Build SQL conditions
-    const conditions = [];
-    conditions.push(sql`auth0_id = ${userId}`);
-
-    if (marketId) {
-      const cleanMarketId = marketId.toString().trim();
-      console.log('Market ID condition:', {
-        original: marketId,
-        cleaned: cleanMarketId,
-        isNumeric: /^\d+$/.test(cleanMarketId)
-      });
-      conditions.push(sql`CAST(market_id AS text) = CAST(${cleanMarketId} AS text)`);
-    } else {
-      conditions.push(sql`market_id IS NULL`);
+    if (!marketId) {
+      return NextResponse.json({ 
+        error: 'Market ID required'
+      }, { status: 400 });
     }
 
-    console.log('SQL conditions:', {
-      conditionCount: conditions.length,
-      hasMarketId: !!marketId
-    });
-
-    const queryString = sql`
+    const trees = await sql`
       SELECT 
-        id as tree_id,
+        id, 
+        auth0_id,
         market_id, 
-        tree_data, 
         title, 
-        created_at, 
+        tree_data,
+        created_at,
         updated_at
       FROM qa_trees 
-      WHERE ${sql.join(conditions, sql` AND `)}
+      WHERE auth0_id = ${session.user.sub}
+        AND market_id = ${marketId}
       ORDER BY updated_at DESC
     `;
 
-    console.log('Executing query with conditions:', {
-      userId,
-      marketId,
-      timestamp: new Date().toISOString()
-    });
-
-    const trees = await queryString;
-
-    console.log('Query results:', {
+    console.log('Retrieved trees:', {
       count: trees.length,
-      marketIds: trees.map(t => t.market_id),
-      userId,
-      timestamp: new Date().toISOString()
+      firstTreeId: trees[0]?.id
     });
 
     return NextResponse.json(trees);
   } catch (error) {
-    console.error('Error in GET /api/qa-trees:', error);
+    console.error('Error fetching QA trees:', error);
     return NextResponse.json({ 
-      error: 'Internal Server Error',
-      message: error instanceof Error ? error.message : 'Unknown error',
-      requestId: Date.now().toString(36)
-    }, { 
-      status: 500 
-    });
+      error: 'Failed to fetch QA trees',
+      details: error instanceof Error ? error.message : String(error)
+    }, { status: 500 });
   }
 }
