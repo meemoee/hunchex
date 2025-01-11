@@ -29,7 +29,7 @@ export default function RightSidebar() {
       .join('\n');
   }
 
-  const [streamingMarkets, setStreamingMarkets] = useState<any[]>([]);
+  const [streamingMarkets, setStreamingMarkets] = useState<Market[]>([]);
 
 	const handleChatMessage = async (userMessage: string) => {
 	  if (!userMessage.trim() || isStreaming) return;
@@ -53,7 +53,7 @@ export default function RightSidebar() {
 		if (!reader) throw new Error('No reader')
 		
 		let accumulatedContent = '';
-		let marketData: any[] = [];
+		let marketData: Market[] = [];
 		
 		while (true) {
 		  const { done, value } = await reader.read()
@@ -87,7 +87,7 @@ export default function RightSidebar() {
 					  
 					  // Dynamically update visible markets based on accumulated content
 					  if (marketData.length > 0) {
-						const newFilteredMarkets = marketData.filter((market: any) => 
+						const newFilteredMarkets = marketData.filter((market: Market) => 
 						  accumulatedContent.toLowerCase().includes(market.id.toLowerCase())
 						);
 						setStreamingMarkets(newFilteredMarkets);
@@ -107,7 +107,7 @@ export default function RightSidebar() {
 		// Filter markets based on IDs mentioned in the streaming content
 		let filteredMarkets = marketData;
 		if (marketData && accumulatedContent) {
-		  filteredMarkets = marketData.filter((market: any) => 
+		  filteredMarkets = marketData.filter((market: Market) => 
 			accumulatedContent.toLowerCase().includes(market.id.toLowerCase())
 		  );
 		}
@@ -139,7 +139,7 @@ export default function RightSidebar() {
 	  }
 	}
   
-  const removeMarketIds = (text: string, markets: any[]): string => {
+  const removeMarketIds = (text: string, markets: Market[]): string => {
 	  let result = text;
 	  if (markets && markets.length > 0) {
 		// First handle multiple IDs in parentheses
