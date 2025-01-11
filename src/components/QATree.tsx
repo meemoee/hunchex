@@ -513,7 +513,7 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
           branchNodeClassName="node__branch"
           leafNodeClassName="node__leaf"
           pathClassFunc={() => 'node__link rd3t-link'}
-          pathFunc={(linkData, orientation) => {
+          pathFunc={(linkData) => {
             const { source, target } = linkData;
             const midX = (source.x + target.x) / 2;
             const midY = (source.y + target.y) / 2;
