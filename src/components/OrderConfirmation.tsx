@@ -209,7 +209,7 @@ export function OrderConfirmation({
   // Update order type whenever price changes
   useEffect(() => {
     updateOrderType(price)
-  }, [price, orderbook, action])
+  }, [price, updateOrderType])
 
   const orderbookRef = useRef<HTMLDivElement>(null)
   const previousScrollPosition = useRef(0)
@@ -218,7 +218,7 @@ export function OrderConfirmation({
     onPriceChange(clickedPrice)
   }
 
-  const centerSpread = (): boolean => {
+  const centerSpread = useCallback((): boolean => {
     const container = orderbookRef.current
     if (!container || !orderbook) return false
 
@@ -243,7 +243,7 @@ export function OrderConfirmation({
     
     container.scrollTop = relativeSpreadPoint - (containerRect.height / 2)
     return true
-  }
+  }, [orderbook])
 
   // Save scroll position when user scrolls
   const handleScroll = () => {
@@ -267,7 +267,7 @@ export function OrderConfirmation({
       }, 100)
       return () => clearTimeout(timer)
     }
-  }, [isOpen, orderbook, hasInitiallyCentered, balance, balancePercentage, price, onAmountChange])
+  }, [isOpen, orderbook, hasInitiallyCentered, balance, balancePercentage, price, onAmountChange, centerSpread])
 
   useEffect(() => {
     if (!isOpen) {
