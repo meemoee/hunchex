@@ -106,28 +106,6 @@ export default function MoversListPage() {
     }
   }, [user])
 
-  const refreshUserData = async (options = { immediate: false }) => {
-    if (!user) return
-    
-    console.log('Refreshing user data:', options);
-    setIsLoadingUserData(true)
-    
-    try {
-      await Promise.all([
-        fetchHoldings({ forceRefresh: options.immediate }),
-        fetchBalance(),
-        fetchActiveOrders()
-      ])
-      
-      if (options.immediate) {
-        console.log('Immediate refresh completed');
-      }
-    } catch (error) {
-      console.error('Error refreshing user data:', error)
-    } finally {
-      setIsLoadingUserData(false)
-    }
-  }
 
   const fetchHoldings = useCallback(async (options = { forceRefresh: false }) => {
     if (!user) return false;
@@ -276,7 +254,7 @@ export default function MoversListPage() {
     })
   }
 
-  const fetchTopMovers = useCallback(async (page = 1, pageSize = 10, search = '', openOnly = false) => {
+  const fetchTopMovers = useCallback(async (page = 1, pageSize = 10, search = '') => {
 	  console.log('Starting fetch:', { 
 		page, 
 		pageSize, 
@@ -345,7 +323,7 @@ export default function MoversListPage() {
 
   useEffect(() => {
     fetchTopMovers(1, 10)
-  }, [selectedInterval, openMarketsOnly])
+  }, [selectedInterval, openMarketsOnly, fetchTopMovers])
 
   if (isAuthLoading) return <div className="min-h-screen bg-background flex items-center justify-center">Loading...</div>
   if (authError) return <div className="min-h-screen bg-background flex items-center justify-center text-red-500">Error: {authError.message}</div>
