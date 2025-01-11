@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useWebSocket } from '@/lib/websocket'
 import Link from 'next/link'
 import Image from 'next/image'
