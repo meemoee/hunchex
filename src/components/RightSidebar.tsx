@@ -94,7 +94,7 @@ export default function RightSidebar() {
 					  }
 					}
 				  }
-				} catch (parseError) {
+				} catch {
 				  console.error('Error parsing streaming response');
 				}
 			  }
