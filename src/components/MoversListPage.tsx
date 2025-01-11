@@ -231,33 +231,70 @@ export default function MoversListPage() {
           break
       }
     })
-  }, [socket, isConnected, subscribeToUpdates, fetchHoldings, fetchBalance, fetchActiveOrders, updateMoverData])
-  
-  interface PriceUpdateData {
-  market_id: string;
-  last_traded_price: number;
-  yes_price: number;
-  no_price: number;
-  volume: number;
-}
+  useEffect(() => {
+    if (!socket || !isConnected) return
 
-  const updateMoverData = (updateData: PriceUpdateData) => {
-    setTopMovers(prevMovers => {
-      const index = prevMovers.findIndex(m => m.market_id === updateData.market_id)
-      if (index === -1) return prevMovers
+    interface PriceUpdateData {
+      market_id: string;
+      last_traded_price: number;
+      yes_price: number;
+      no_price: number;
+      volume: number;
+    }
 
-      const updatedMovers = [...prevMovers]
-      updatedMovers[index] = {
-        ...updatedMovers[index],
-        final_last_traded_price: updateData.last_traded_price,
-        final_best_ask: updateData.yes_price,
-        final_best_bid: updateData.no_price,
-        volume: updateData.volume
+    const updateMoverData = (updateData: PriceUpdateData) => {
+      setTopMovers(prevMovers => {
+        const index = prevMovers.findIndex(m => m.market_id === updateData.market_id)
+        if (index === -1) return prevMovers
+
+        const updatedMovers = [...prevMovers]
+        updatedMovers[index] = {
+          ...updatedMovers[index],
+          final_last_traded_price: updateData.last_traded_price,
+          final_best_ask: updateData.yes_price,
+          final_best_bid: updateData.no_price,
+          volume: updateData.volume
+        }
+
+        return updatedMovers
+      })
+    }
+
+    subscribeToUpdates((type, data) => {
+      console.log('Debug (MoversListPage): Received WS event', type, data);
+      switch (type) {
+        case 'holdings_update':
+          console.log('Holdings update received, refreshing...');
+          fetchHoldings()
+          break
+        case 'balance_update':
+          if (data.balance !== undefined) {
+            console.log('Balance update received:', data.balance);
+            setBalance(data.balance)
+          }
+          break
+        case 'orders_update':
+          console.log('Orders update received, refreshing...');
+          fetchActiveOrders()
+          break
+        case 'price_update':
+          updateMoverData(data)
+          break
+        case 'order_execution':
+          console.log('Order execution update received:', data);
+          if (data.needsHoldingsRefresh) {
+            console.log('Immediate holdings refresh required');
+            Promise.all([
+              fetchHoldings(),
+              fetchBalance(),
+              fetchActiveOrders()
+            ]).catch(console.error);
+          }
+          break
       }
-
-      return updatedMovers
     })
-  }
+  }, [socket, isConnected, subscribeToUpdates, fetchHoldings, fetchBalance, fetchActiveOrders])
+  
 
   const fetchTopMovers = useCallback(async (page = 1, pageSize = 10, search = '') => {
 	  console.log('Starting fetch:', { 
