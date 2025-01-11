@@ -5,10 +5,17 @@ import { useState } from 'react'
 
 export default function RightSidebar() {
   const [chatMessage, setChatMessage] = useState('')
+  interface Market {
+    id: string;
+    question: string;
+    yes_price?: number;
+    volume?: number;
+  }
+
   interface Message {
     type: 'user' | 'assistant' | 'markets';
     content?: string;
-    markets?: any[];
+    markets?: Market[];
   }
   
   const [messages, setMessages] = useState<Message[]>([])
