@@ -773,7 +773,7 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
                 Create New Tree
               </h3>
               <p className="text-sm text-gray-300 mb-6">
-                Are you sure you want to use "{newRootNode.name}" as the root for a new analysis tree?
+                Are you sure you want to use &quot;{newRootNode.name}&quot; as the root for a new analysis tree?
               </p>
               <div className="flex justify-end space-x-2">
                 <button
