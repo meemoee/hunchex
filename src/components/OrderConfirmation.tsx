@@ -70,15 +70,7 @@ type OrderConfirmationProps = {
   onPriceChange: (value: number) => void
   onOrderSuccess: () => void
   onRefreshUserData: () => void
-  orderStatus: {
-    type: 'success' | 'error' | null
-    message: string
-  }
   balance: number
-  setOrderStatus: (status: {
-    type: 'success' | 'error' | null
-    message: string
-  }) => void
 }
 
 const formatNumber = (num: number, maxDecimals = 2) => {
@@ -99,8 +91,6 @@ export function OrderConfirmation({
   onPriceChange,
   onOrderSuccess,
   onRefreshUserData,
-  orderStatus,
-  setOrderStatus,
   balance,
 }: OrderConfirmationProps) {
   const [orderType, setOrderType] = useState<'market' | 'limit'>('limit')
