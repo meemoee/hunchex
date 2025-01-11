@@ -44,7 +44,6 @@ function formatMarkdown(content: string) {
 import '@/styles/qa-tree.css'
 import Tree from 'react-d3-tree'
 import { 
-  MessageCircle, 
   ZoomIn, 
   ZoomOut, 
   MousePointer, 
@@ -166,7 +165,7 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
     })
 
     return nodes.map(transformNode)
-  }, [marketId, user])
+  }, [])
 
   // Fetch saved QA trees
   const fetchSavedTrees = useCallback(async () => {
