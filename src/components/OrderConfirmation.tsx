@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useUser } from '@auth0/nextjs-auth0/client'
 import { type TopMover } from '@/types/mover'
 import Image from 'next/image'
@@ -192,7 +192,7 @@ export function OrderConfirmation({
   }
 
   // Determine order type based on price and orderbook
-  const updateOrderType = (currentPrice: number) => {
+  const updateOrderType = useCallback((currentPrice: number) => {
     if (!orderbook?.data) return
     
     if (action === 'buy') {
@@ -204,7 +204,7 @@ export function OrderConfirmation({
       const highestBid = orderbook.data.bids[0]?.price
       setOrderType(currentPrice <= highestBid ? 'market' : 'limit')
     }
-  }
+  }, [orderbook, action])
 
   // Update order type whenever price changes
   useEffect(() => {
