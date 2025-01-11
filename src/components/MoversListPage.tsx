@@ -89,7 +89,7 @@ export default function MoversListPage() {
 	  }
 	}, [user])
 
-  const fetchActiveOrders = async () => {
+  const fetchActiveOrders = useCallback(async () => {
     if (!user) return false
     console.log('Debug (MoversListPage): fetchActiveOrders called')
     try {
@@ -104,7 +104,7 @@ export default function MoversListPage() {
       console.error('Active orders fetch error:', error)
       return false
     }
-  }
+  }, [user])
 
   const refreshUserData = async (options = { immediate: false }) => {
     if (!user) return
@@ -129,7 +129,7 @@ export default function MoversListPage() {
     }
   }
 
-  const fetchHoldings = async (options = { forceRefresh: false }) => {
+  const fetchHoldings = useCallback(async (options = { forceRefresh: false }) => {
     if (!user) return false;
     console.log('Debug (MoversListPage): fetchHoldings called');
     try {
@@ -185,7 +185,7 @@ export default function MoversListPage() {
       console.error('Holdings fetch error:', error);
       return false;
     }
-  };
+  }, [user]);
 
   const calculateTotalValue = () => {
     const holdingsValue = holdings.reduce((total, holding) => {
@@ -276,7 +276,7 @@ export default function MoversListPage() {
     })
   }
 
-  const fetchTopMovers = async (page = 1, pageSize = 10, search = '', openOnly = false) => {
+  const fetchTopMovers = useCallback(async (page = 1, pageSize = 10, search = '', openOnly = false) => {
 	  console.log('Starting fetch:', { 
 		page, 
 		pageSize, 
@@ -341,7 +341,7 @@ export default function MoversListPage() {
 		  setIsLoadingMore(false);
 		}
 	  }
-	};
+	}, [selectedInterval, openMarketsOnly]);
 
   useEffect(() => {
     fetchTopMovers(1, 10)
