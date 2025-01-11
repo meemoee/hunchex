@@ -179,13 +179,18 @@ export default function MoversListPage() {
     calculateTotalValue()
   }, [calculateTotalValue])
 
-	useEffect(() => {
-	  if (user) {
-		fetchHoldings()
-		fetchBalance()
-		fetchActiveOrders()
-	  }
-	}, [user, fetchHoldings, fetchBalance, fetchActiveOrders])
+  useEffect(() => {
+    if (user) {
+      setIsLoadingUserData(true)
+      Promise.all([
+        fetchHoldings(),
+        fetchBalance(),
+        fetchActiveOrders()
+      ]).finally(() => {
+        setIsLoadingUserData(false)
+      })
+    }
+  }, [user, fetchHoldings, fetchBalance, fetchActiveOrders])
 
   const { socket, isConnected, subscribeToUpdates } = useWebSocket()
 
@@ -226,7 +231,7 @@ export default function MoversListPage() {
           break
       }
     })
-  }, [socket, isConnected, subscribeToUpdates])
+  }, [socket, isConnected, subscribeToUpdates, fetchHoldings, fetchBalance, fetchActiveOrders, updateMoverData])
   
   interface PriceUpdateData {
   market_id: string;
