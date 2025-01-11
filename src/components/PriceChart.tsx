@@ -180,7 +180,7 @@ function Chart({
               data={splitData.above}
               x={d => timeScale(d.time)}
               y={d => priceScale(d.price)}
-              y1={d => priceScale(50)}
+              y1={() => priceScale(50)}
               curve={curveLinear}
               fill="url(#above-gradient)"
             />
@@ -188,7 +188,7 @@ function Chart({
               data={splitData.below}
               x={d => timeScale(d.time)}
               y={d => priceScale(d.price)}
-              y1={d => priceScale(50)}
+              y1={() => priceScale(50)}
               curve={curveLinear}
               fill="url(#below-gradient)"
             />
