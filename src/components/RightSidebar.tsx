@@ -67,10 +67,10 @@ export default function RightSidebar() {
 				if (jsonStr === "[DONE]") break;
 				
 				try {
-				  const parsed = JSON.parse(jsonStr);
+				  const parsed = JSON.parse(jsonStr) as Message;
 				  if (parsed.type === 'markets') {
 					console.log("Received markets data:", parsed.markets);
-					marketData = parsed.markets;
+					marketData = parsed.markets as Market[];
 				  } else if (parsed.content) {
 					if (!parsed.content.includes("Starting synthesis") && 
 						!parsed.content.includes("Synthesis complete")) {
