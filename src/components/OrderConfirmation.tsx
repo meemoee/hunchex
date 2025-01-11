@@ -113,10 +113,6 @@ export function OrderConfirmation({
       // Determine order type and validate parameters
       const size = Number(amount);
       if (isNaN(size) || size <= 0) {
-        setOrderStatus({
-          type: 'error',
-          message: 'Invalid order size'
-        });
         return;
       }
 
@@ -143,21 +139,12 @@ export function OrderConfirmation({
       if (!response.ok) {
         const error = await response.json();
         console.error('Order submission failed:', error);
-        setOrderStatus({
-          type: 'error',
-          message: error.error || 'Failed to submit order'
-        });
         return;
       }
 
       const result = await response.json();
       console.log('Order submission successful:', result);
       console.log('Debug (OrderConfirmation): handleSubmitOrder success, about to call onRefreshUserData()');
-      
-      setOrderStatus({
-        type: 'success',
-        message: `${orderType.toUpperCase()} order submitted successfully`
-      });
 
       // Handle immediate execution for market orders
       if (result.needsHoldingsRefresh || orderType === 'market') {
