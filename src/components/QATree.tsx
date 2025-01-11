@@ -552,7 +552,7 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
               </text>
             );
           }}
-          renderCustomNodeElement={({ nodeDatum, toggleNode }) => (
+          renderCustomNodeElement={({ nodeDatum }) => (
             <g>
               <foreignObject width={400} height={200} x={-200} y={-100} className="qa-tree-node">
                 <div className="bg-gray-800/90 rounded-lg shadow-lg border border-white/10 qa-tree-node-content">
