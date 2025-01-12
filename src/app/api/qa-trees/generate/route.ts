@@ -184,7 +184,6 @@ EXTRACTION INSTRUCTIONS:
             const parsed = JSON.parse(jsonStr);
             const content = parsed.choices?.[0]?.delta?.content;
             if (content) {
-              process.stdout.write(content);
               collectedContent.push(content);
             }
           } catch (error) {
