@@ -627,37 +627,37 @@ const TopMoversList: React.FC<TopMoversListProps> = ({
                             </>
                           ))
                         ) : (
-                          JSON.parse(mover.outcomes.replace(/&apos;/g, '"')).map((outcome: string) => (
-                            <>
-                              <button
-                                key={outcome}
-                                className={`${index === 0 ? 'action-buy text-green-600' : 'action-sell text-red-600'} flex flex-col items-center p-1 font-bold w-full overflow-hidden`}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleBuySell(outcome.toUpperCase(), mover)
-                                }}
-                              >
-                                <span
-                                  className="outcome-text w-full text-center leading-tight whitespace-nowrap overflow-hidden text-ellipsis px-1"
-                                  style={{ fontSize: '0.85rem' }}
-                                >
-                                  {outcome}
-                                </span>
-                                <span className="text-gray-400 text-sm mt-0.5">
-                                  {i === 0 ? 
-                                    formatPrice(mover.final_best_ask) :
-                                    formatPrice(1 - mover.final_best_bid)
-                                  }
-                                </span>
-                              </button>
-                              {i === 0 && JSON.parse(mover.outcomes.replace(/&apos;/g, '"')).length > 1 && (
-                                <div className="action-separator text-gray-600 flex items-center justify-center h-full">
-                                  |
-                                </div>
-                              )}
-                            </>
-                          ))
-                        )
+						  JSON.parse(mover.outcomes.replace(/&apos;/g, '"')).map((outcome: string, i: number) => (
+							<>
+							  <button
+								key={outcome}
+								className={`${i === 0 ? 'action-buy text-green-600' : 'action-sell text-red-600'} flex flex-col items-center p-1 font-bold w-full overflow-hidden`}
+								onClick={(e) => {
+								  e.stopPropagation()
+								  handleBuySell(outcome.toUpperCase(), mover)
+								}}
+							  >
+								<span
+								  className="outcome-text w-full text-center leading-tight whitespace-nowrap overflow-hidden text-ellipsis px-1"
+								  style={{ fontSize: '0.85rem' }}
+								>
+								  {outcome}
+								</span>
+								<span className="text-gray-400 text-sm mt-0.5">
+								  {i === 0 ? 
+									formatPrice(mover.final_best_ask) :
+									formatPrice(1 - mover.final_best_bid)
+								  }
+								</span>
+							  </button>
+							  {i === 0 && JSON.parse(mover.outcomes.replace(/&apos;/g, '"')).length > 1 && (
+								<div className="action-separator text-gray-600 flex items-center justify-center h-full">
+								  |
+								</div>
+							  )}
+							</>
+						  ))
+						)
                       ) : (
                         <>
                           <button
