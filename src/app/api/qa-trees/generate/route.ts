@@ -82,7 +82,8 @@ ZERO DEVIATION FROM SOURCE ALLOWED`;
 async function getMarketInfo(marketId: string): Promise<MarketInfo | null> {
   try {
     logger.debug('Fetching market info for:', marketId);
-    const result = await sql<MarketInfo[]>`
+    // Remove the generic type from the sql template
+    const result = await sql`
       SELECT 
         m.id,
         m.event_id,
@@ -102,7 +103,8 @@ async function getMarketInfo(marketId: string): Promise<MarketInfo | null> {
       return null;
     }
 
-    const marketInfo = result[0];
+    // Type assertion here instead
+    const marketInfo = result[0] as MarketInfo;
     logger.debug('Market info retrieved:', {
       id: marketInfo.id,
       question: marketInfo.question,
@@ -163,12 +165,12 @@ EXTRACTION INSTRUCTIONS:
       body: JSON.stringify(data)
     });
 
-    if (!response.ok) return null;
+    if (!response.ok || !response.body) return null;
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    const collectedContent: string[] = [];
-    let buffer = '';
+	const reader = response.body.getReader();
+	const decoder = new TextDecoder();
+	const collectedContent: string[] = [];
+	let buffer = '';
 
     while (true) {
       const { done, value } = await reader.read();
@@ -254,9 +256,9 @@ GENERATE A PRECISE, VERBATIM QUESTION CAPTURING THE FUNDAMENTAL MARKET UNCERTAIN
       })
     });
 
-    if (!response.ok) return null;
+    if (!response.ok || !response.body) return null;
 
-    const reader = response.body.getReader();
+	const reader = response.body.getReader();
     const decoder = new TextDecoder();
     const collectedContent: string[] = [];
     let buffer = '';
@@ -350,9 +352,9 @@ EXTRACT ${nodesPerLayer} PRECISE SUB-QUESTIONS THAT:
       })
     });
 
-    if (!response.ok) return null;
+    if (!response.ok || !response.body) return null;
 
-    const reader = response.body.getReader();
+	const reader = response.body.getReader();
     const decoder = new TextDecoder();
     const collectedContent: string[] = [];
     let buffer = '';
@@ -524,6 +526,11 @@ export async function POST(request: Request) {
         }
       }
     }
+	
+  // Add this line to actually call populateChildren
+  logger.debug('Starting tree population...');
+  await populateChildren(treeData, 0);  // <-- Add this line!
+
 
     logger.debug('Saving tree to database...');
     const treeId = await saveQaTree(session.user.sub, marketId, treeData);
