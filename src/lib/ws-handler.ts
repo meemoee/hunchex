@@ -1,3 +1,8 @@
+interface WSMessage {
+  type: string;
+  data: unknown;
+}
+
 export class WebSocketHandler {
   private clients = new Map<string, WebSocket>();
 
@@ -41,7 +46,7 @@ export class WebSocketHandler {
     this.clients.delete(userId);
   }
 
-  private handleMessage(userId: string, data: any) {
+  private handleMessage(userId: string, data: WSMessage) {
     // Basic echo for testing
     const socket = this.clients.get(userId);
     if (socket?.readyState === WebSocket.OPEN) {
@@ -52,7 +57,7 @@ export class WebSocketHandler {
     }
   }
 
-  broadcast(message: any) {
+  broadcast(message: WSMessage) {
     this.clients.forEach(socket => {
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify(message));

@@ -13,7 +13,7 @@ export const validateAuth0Token = auth({
     rejectUnauthorized: false
   },
   // Add error handler for token validation
-  errorHandler: (err, req, res) => {
+  errorHandler: (err, req) => {
     authLogger.error('Token validation error:', {
       error: {
         name: err.name,
