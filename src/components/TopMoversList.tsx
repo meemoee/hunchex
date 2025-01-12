@@ -624,7 +624,7 @@ const TopMoversList: React.FC<TopMoversListProps> = ({
                             </>
                           ))
                         ) : (
-                          JSON.parse(mover.outcomes.replace(/'/g, '"')).map((outcome: string, i: number) => (
+                          JSON.parse(mover.outcomes.replace(/&apos;/g, '"')).map((outcome: string, i: number) => (
                             <>
                               <button
                                 key={outcome}
@@ -647,7 +647,7 @@ const TopMoversList: React.FC<TopMoversListProps> = ({
                                   }
                                 </span>
                               </button>
-                              {i === 0 && JSON.parse(mover.outcomes.replace(/'/g, '"')).length > 1 && (
+                              {i === 0 && JSON.parse(mover.outcomes.replace(/&apos;/g, '"')).length > 1 && (
                                 <div className="action-separator text-gray-600 flex items-center justify-center h-full">
                                   |
                                 </div>
@@ -706,7 +706,7 @@ const TopMoversList: React.FC<TopMoversListProps> = ({
                       <span className="text-xs text-gray-400 mt-1">
                         {mover.outcomes ? 
                           (Array.isArray(mover.outcomes) ? mover.outcomes[0] : 
-                          JSON.parse(mover.outcomes.replace(/'/g, '"'))[0]) : 
+                          JSON.parse(mover.outcomes.replace(/&apos;/g, '"'))[0]) : 
                           'YES'
                         }
                       </span>
