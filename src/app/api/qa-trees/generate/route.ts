@@ -1,9 +1,31 @@
-// src/app/api/qa-trees/generate/route.ts
-import { NextResponse } from 'next/server';
 import { getSession } from '@auth0/nextjs-auth0/edge';
 import { neon } from '@neondatabase/serverless';
-import crypto from 'crypto';
-import fetch from 'node-fetch';
+
+export const runtime = 'edge';
+
+type LoggableValue = string | number | boolean | null | undefined | object;
+
+interface MarketInfo {
+  id: string;
+  event_id: string;
+  question: string;
+  description: string;
+  active: boolean;
+  closed: boolean;
+  archived: boolean;
+  event_title: string;
+}
+
+interface QANode {
+  question: string;
+  answer: string;
+  children?: QANode[];
+}
+
+interface QAPair {
+  question: string;
+  answer: string;
+}
 
 const config = {
   OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
@@ -15,9 +37,9 @@ const config = {
 const sql = neon(process.env.DATABASE_URL!);
 
 const logger = {
-  debug: (...args: any[]) => console.log(`=== QA TREE DEBUG ===\n`, new Date().toISOString(), ...args),
-  error: (...args: any[]) => console.error(`!!! QA TREE ERROR !!!\n`, new Date().toISOString(), ...args),
-  info: (...args: any[]) => console.log(`=== QA TREE INFO ===\n`, new Date().toISOString(), ...args)
+  debug: (...args: LoggableValue[]) => console.log(`=== QA TREE DEBUG ===\n`, new Date().toISOString(), ...args),
+  error: (...args: LoggableValue[]) => console.error(`!!! QA TREE ERROR !!!\n`, new Date().toISOString(), ...args),
+  info: (...args: LoggableValue[]) => console.log(`=== QA TREE INFO ===\n`, new Date().toISOString(), ...args)
 };
 
 const PERPLEXITY_SYSTEM_PROMPT = `YOU ARE A PRECISE EXTRACTION MACHINE:
@@ -57,10 +79,10 @@ REQUIRED OUTPUT FORMAT:
 
 ZERO DEVIATION FROM SOURCE ALLOWED`;
 
-async function getMarketInfo(marketId: string) {
+async function getMarketInfo(marketId: string): Promise<MarketInfo | null> {
   try {
     logger.debug('Fetching market info for:', marketId);
-    const result = await sql`
+    const result = await sql<MarketInfo[]>`
       SELECT 
         m.id,
         m.event_id,
@@ -89,12 +111,12 @@ async function getMarketInfo(marketId: string) {
 
     return marketInfo;
   } catch (error) {
-    logger.error('Market info retrieval error:', error);
+    logger.error('Market info retrieval error:', error instanceof Error ? error.message : String(error));
     throw error;
   }
 }
 
-async function parseWithGemini(content: string) {
+async function parseWithGemini(content: string): Promise<QAPair[] | null> {
   if (!content) {
     logger.error('No content provided for Gemini parsing');
     return null;
@@ -143,7 +165,7 @@ EXTRACTION INSTRUCTIONS:
 
     if (!response.ok) return null;
 
-    let collectedContent = [];
+    const collectedContent: string[] = [];
     let buffer = '';
 
     for await (const chunk of response.body!) {
@@ -166,6 +188,7 @@ EXTRACTION INSTRUCTIONS:
               collectedContent.push(content);
             }
           } catch (error) {
+		  logger.error("JSON parsing error in stream:", error instanceof Error ? error.message : String(error));
             continue;
           }
         }
@@ -180,15 +203,16 @@ EXTRACTION INSTRUCTIONS:
       logger.debug('Parsed QA pairs:', JSON.stringify(parsed.qa_pairs, null, 2));
       return parsed.qa_pairs || [];
     } catch (error) {
+	logger.error("JSON parsing error in stream:", error instanceof Error ? error.message : String(error));
       return null;
     }
   } catch (error) {
-    logger.error("Gemini parsing error:", error);
+    logger.error("Gemini parsing error:", error instanceof Error ? error.message : String(error));
     return null;
   }
 }
 
-async function generateRootQuestion(marketInfo: any) {
+async function generateRootQuestion(marketInfo: MarketInfo): Promise<QAPair | null> {
   const prompt = `
 CORE MARKET INSIGHT EXTRACTION:
 
@@ -225,7 +249,7 @@ GENERATE A PRECISE, VERBATIM QUESTION CAPTURING THE FUNDAMENTAL MARKET UNCERTAIN
 
     if (!response.ok) return null;
 
-    let collectedContent = [];
+    const collectedContent: string[] = [];
     for await (const chunk of response.body!) {
       const text = new TextDecoder().decode(chunk);
       const lines = text.split('\n');
@@ -243,6 +267,7 @@ GENERATE A PRECISE, VERBATIM QUESTION CAPTURING THE FUNDAMENTAL MARKET UNCERTAIN
               collectedContent.push(content);
             }
           } catch (error) {
+		  logger.error("JSON parsing error in stream:", error instanceof Error ? error.message : String(error));
             continue;
           }
         }
@@ -253,17 +278,21 @@ GENERATE A PRECISE, VERBATIM QUESTION CAPTURING THE FUNDAMENTAL MARKET UNCERTAIN
     const parsedQaPairs = await parseWithGemini(fullResponse);
 
     if (parsedQaPairs) {
-      return parsedQaPairs.length === 1 ? parsedQaPairs[0] : parsedQaPairs;
+      return parsedQaPairs.length === 1 ? parsedQaPairs[0] : parsedQaPairs[0];
     }
 
     return null;
   } catch (error) {
-    logger.error("Request Error:", error);
+    logger.error("Request Error:", error instanceof Error ? error.message : String(error));
     return null;
   }
 }
 
-async function generateSubQuestions(parentQuestion: any, marketInfo: any, depth = 0, nodesPerLayer = 3) {
+async function generateSubQuestions(
+  parentQuestion: QANode,
+  marketInfo: MarketInfo,
+  nodesPerLayer = 3
+): Promise<QAPair[] | null> {
   const prompt = `
 PARENT QUESTION CONTEXT:
 QUESTION: ${parentQuestion.question}
@@ -304,7 +333,7 @@ EXTRACT ${nodesPerLayer} PRECISE SUB-QUESTIONS THAT:
 
     if (!response.ok) return null;
 
-    let collectedContent = [];
+    const collectedContent: string[] = [];
     for await (const chunk of response.body!) {
       const text = new TextDecoder().decode(chunk);
       const lines = text.split('\n');
@@ -321,6 +350,7 @@ EXTRACT ${nodesPerLayer} PRECISE SUB-QUESTIONS THAT:
               collectedContent.push(content);
             }
           } catch (error) {
+		  logger.error("JSON parsing error in stream:", error instanceof Error ? error.message : String(error));
             continue;
           }
         }
@@ -332,12 +362,12 @@ EXTRACT ${nodesPerLayer} PRECISE SUB-QUESTIONS THAT:
 
     return parsedQaPairs;
   } catch (error) {
-    logger.error("Request Error:", error);
+    logger.error("Request Error:", error instanceof Error ? error.message : String(error));
     return null;
   }
 }
 
-async function saveQaTree(auth0UserId: string, marketId: string, treeData: any) {
+async function saveQaTree(auth0UserId: string, marketId: string, treeData: QANode): Promise<string> {
   const treeId = crypto.randomUUID();
   const now = new Date().toISOString();
   
@@ -384,27 +414,36 @@ async function saveQaTree(auth0UserId: string, marketId: string, treeData: any) 
 }
 
 export async function POST(request: Request) {
-  const startTime = process.hrtime();
+  const startTime = performance.now();
   logger.info('Starting QA tree generation...');
 
   try {
     const session = await getSession();
     if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
     const { marketId, maxDepth = config.DEFAULT_MAX_DEPTH, nodesPerLayer = config.DEFAULT_NODES_PER_LAYER } = await request.json();
 
     if (!marketId) {
       logger.error('No market ID provided');
-      return NextResponse.json({ error: 'Market ID required' }, { status: 400 });
+      return new Response(JSON.stringify({ error: 'Market ID required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
     logger.debug('Fetching market info...');
     const marketInfo = await getMarketInfo(marketId);
     if (!marketInfo) {
       logger.error(`Market not found: ${marketId}`);
-      return NextResponse.json({ error: 'Market not found' }, { status: 404 });
+      return new Response(JSON.stringify({ error: 'Market not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
     logger.debug('Market info retrieved:', marketInfo);
 
@@ -412,17 +451,20 @@ export async function POST(request: Request) {
     const root = await generateRootQuestion(marketInfo);
     if (!root) {
       logger.error('Failed to generate root question');
-      return NextResponse.json({ error: 'Failed to generate root question' }, { status: 500 });
+      return new Response(JSON.stringify({ error: 'Failed to generate root question' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
     logger.debug('Root question generated:', root);
 
-    const treeData = {
+    const treeData: QANode = {
       question: root.question,
       answer: root.answer,
       children: []
     };
 
-    async function populateChildren(node: any, depth = 0) {
+    async function populateChildren(node: QANode, depth: number) {
       logger.debug(`Populating children at depth ${depth}`, {
         parentQuestion: node.question,
         currentDepth: depth,
@@ -435,10 +477,11 @@ export async function POST(request: Request) {
       }
 
       logger.debug('Generating sub-questions for:', node.question);
-      const subQuestions = await generateSubQuestions(
+	  
+	  
+	 const subQuestions = await generateSubQuestions(
         { question: node.question, answer: node.answer },
         marketInfo,
-        depth,
         nodesPerLayer
       );
 
@@ -450,27 +493,28 @@ export async function POST(request: Request) {
       }
     }
 
-    logger.debug('Starting tree population...');
-    await populateChildren(treeData);
-    const elapsedTime = process.hrtime(startTime);
-    logger.info(`Tree population completed in ${elapsedTime[0]}s ${elapsedTime[1]/1000000}ms`);
-
     logger.debug('Saving tree to database...');
     const treeId = await saveQaTree(session.user.sub, marketId, treeData);
     logger.info(`Tree saved successfully with ID: ${treeId}`);
 
-    return NextResponse.json({ treeId });
+    return new Response(JSON.stringify({ treeId }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
   } catch (error) {
-	logger.error('Error generating QA tree:', {
-     error: error instanceof Error ? error.message : String(error),
-     stack: error instanceof Error ? error.stack : undefined
-   });
-   return NextResponse.json({ 
-     error: 'Failed to generate QA tree',
-     details: error instanceof Error ? error.message : String(error)
-   }, { status: 500 });
- } finally {
-   const elapsedTime = process.hrtime(startTime);
-   logger.info(`QA tree generation request completed in ${elapsedTime[0]}s ${elapsedTime[1]/1000000}ms`);
- }
+    logger.error('Error generating QA tree:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    return new Response(JSON.stringify({ 
+      error: 'Failed to generate QA tree',
+      details: error instanceof Error ? error.message : String(error)
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } finally {
+    const elapsedTime = performance.now(startTime);
+    logger.info(`QA tree generation request completed in ${elapsedTime[0]}s ${elapsedTime[1]/1000000}ms`);
+  }
 }
