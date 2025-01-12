@@ -3,253 +3,230 @@ import { redis } from '@/app/db/redis';
 import { sql } from 'drizzle-orm';
 import * as schema from '@/app/db/schema';
 
-// Type guard for database errors
-interface DbError extends Error {
-  code?: string;
-}
-
-export async function GET(request: Request) {
-  const authHeader = request.headers.get('authorization');
-  const isAdmin = authHeader === process.env.DEBUG_ADMIN_TOKEN;
-
-  async function testDatabaseConnection() {
+export async function GET() {
+  // Test specific database tables
+  async function testDatabaseTables() {
+    const results: Record<string, { status: string; error?: string }> = {};
+    
     try {
-      // Basic connectivity test using proper schema reference
-      const queryResult = await db.select().from(schema.qa_trees).limit(1);
-      
-      // Get table statistics and database status
-      const diagnostics = await Promise.all([
-        // Table counts
-        db.select({
-          count: sql`count(*)`
-        }).from(schema.qa_trees),
-        
-        // Database version and settings
-        db.execute(sql`SELECT version() as version`),
-        db.execute(sql`SHOW max_connections`),
-        db.execute(sql`SELECT count(*) as active_connections FROM pg_stat_activity`),
-        
-        // Connection pool status
-        db.execute(sql`SELECT 
-          state, 
-          count(*) as count 
-          FROM pg_stat_activity 
-          GROUP BY state`),
+      // Test each table individually
+      const tables = [
+        { name: 'qa_trees', schema: schema.qa_trees },
+        { name: 'users', schema: schema.users },
+        { name: 'holdings', schema: schema.holdings },
+        { name: 'orders', schema: schema.orders },
+        { name: 'markets', schema: schema.markets },
+        { name: 'market_prices', schema: schema.market_prices }
+      ];
 
-        // Table sizes
-        db.execute(sql`SELECT 
-          relname as table_name,
-          n_live_tup as row_count,
-          pg_size_pretty(pg_total_relation_size(relid)) as total_size
-          FROM pg_stat_user_tables
-          ORDER BY n_live_tup DESC`)
-      ]);
-
-      // Get counts for all main tables
-      const tableCounts = await Promise.all([
-        db.select({ count: sql`count(*)` }).from(schema.qa_trees),
-        db.select({ count: sql`count(*)` }).from(schema.users),
-        db.select({ count: sql`count(*)` }).from(schema.holdings),
-        db.select({ count: sql`count(*)` }).from(schema.orders),
-        db.select({ count: sql`count(*)` }).from(schema.markets),
-        db.select({ count: sql`count(*)` }).from(schema.market_prices)
-      ]);
-
-      return {
-        status: 'connected',
-        details: 'Successfully executed diagnostic queries',
-        data: {
-          sampleRecord: queryResult[0],
-          tableCounts: {
-            qa_trees: tableCounts[0],
-            users: tableCounts[1],
-            holdings: tableCounts[2],
-            orders: tableCounts[3],
-            markets: tableCounts[4],
-            market_prices: tableCounts[5]
-          },
-          databaseInfo: {
-            version: diagnostics[1],
-            maxConnections: diagnostics[2],
-            activeConnections: diagnostics[3],
-            connectionStates: diagnostics[4],
-            tableSizes: diagnostics[5]
-          }
+      for (const table of tables) {
+        try {
+          await db.select({ count: sql`count(*)` }).from(table.schema);
+          results[table.name] = { status: 'ok' };
+        } catch (error) {
+          results[table.name] = {
+            status: 'error',
+            error: error instanceof Error ? error.message : 'Unknown error'
+          };
         }
-      };
-    } catch (error) {
-      const isDbError = (error: unknown): error is DbError => {
-        return error instanceof Error && 'code' in error;
-      };
-
-      return {
-        status: 'error',
-        message: error instanceof Error ? error.message : 'Unknown database error',
-        details: error instanceof Error ? error.stack : undefined,
-        context: {
-          connectionUrl: isAdmin ? 
-            process.env.DATABASE_URL?.replace(/\/\/.*@/, '//[REDACTED]@') : 
-            undefined,
-          errorCode: isDbError(error) ? error.code : undefined,
-          errorName: error instanceof Error ? error.name : undefined,
-          timestamp: new Date().toISOString()
-        }
-      };
-    }
-  }
-
-  async function testRedisConnection() {
-    try {
-      const pingResult = await redis.ping();
-      const info = await redis.info();
-      const dbSize = await redis.dbsize();
-      
-      return {
-        status: 'connected',
-        details: 'Successfully connected to Redis',
-        data: isAdmin ? {
-          ping: pingResult,
-          dbSize,
-          info: info,
-          memory: await redis.info('memory'),
-          clients: await redis.info('clients')
-        } : {
-          dbSize
-        }
-      };
+      }
     } catch (error) {
       return {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Unknown Redis error',
-        details: error instanceof Error ? error.stack : undefined,
-        timestamp: new Date().toISOString()
+        error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
+
+    return results;
   }
 
-  async function testAuth0Connection() {
+  // Test Redis operations
+  async function testRedisOperations() {
+    const results: Record<string, { status: string; error?: string }> = {};
+    
     try {
-      const configResponse = await fetch(
-        `${process.env.AUTH0_ISSUER_BASE_URL}/.well-known/openid-configuration`
-      );
-      
-      if (!configResponse.ok) {
-        throw new Error(`Auth0 configuration failed: ${configResponse.statusText}`);
+      // Test basic connection
+      try {
+        await redis.ping();
+        results.connection = { status: 'ok' };
+      } catch (error) {
+        results.connection = {
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        };
       }
 
-      const userinfoResponse = await fetch(
-        `${process.env.AUTH0_ISSUER_BASE_URL}/userinfo`,
-        {
-          headers: {
-            'Authorization': 'Bearer dummy_token'
-          }
-        }
-      );
-
-      return {
-        status: 'connected',
-        details: 'Auth0 endpoints accessible',
-        endpoints: {
-          configuration: configResponse.status,
-          userinfo: userinfoResponse.status
-        },
-        data: isAdmin ? {
-          configurationResponse: await configResponse.json()
-        } : undefined
-      };
+      // Test write operation
+      try {
+        await redis.set('debug_test', 'test');
+        await redis.get('debug_test');
+        await redis.del('debug_test');
+        results.operations = { status: 'ok' };
+      } catch (error) {
+        results.operations = {
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        };
+      }
     } catch (error) {
       return {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Unknown Auth0 error',
-        details: error instanceof Error ? error.stack : undefined,
-        timestamp: new Date().toISOString()
+        error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
+
+    return results;
   }
 
-  function getSystemInfo() {
-    return {
-      memory: process.memoryUsage(),
-      cpu: process.cpuUsage(),
-      resourceUsage: process.resourceUsage(),
-      uptime: process.uptime(),
-      versions: process.versions,
-      env: process.env.NODE_ENV,
-      arch: process.arch,
-      platform: process.platform,
-      pid: process.pid
-    };
+  // Test Auth0 endpoints
+  async function testAuth0Endpoints() {
+    const results: Record<string, { status: string; error?: string }> = {};
+    
+    try {
+      // Test endpoints
+      const endpoints = [
+        '.well-known/openid-configuration',
+        'userinfo',
+        'oauth/token'
+      ];
+
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(`${process.env.AUTH0_ISSUER_BASE_URL}/${endpoint}`);
+          results[endpoint] = { 
+            status: response.ok ? 'ok' : 'error',
+            error: !response.ok ? `HTTP ${response.status}` : undefined
+          };
+        } catch (error) {
+          results[endpoint] = {
+            status: 'error',
+            error: error instanceof Error ? error.message : 'Unknown error'
+          };
+        }
+      }
+    } catch (error) {
+      return {
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+
+    return results;
+  }
+
+  // Test API routes
+  async function testAPIRoutes() {
+    const results: Record<string, { status: string; error?: string }> = {};
+    
+    try {
+      const routes = [
+        '/api/auth/token',
+        '/api/auth/debug',
+        '/api/holdings',
+        '/api/orders',
+        '/api/qa-trees',
+        '/api/balance',
+        '/api/active-orders',
+        '/api/markets'
+      ];
+
+      for (const route of routes) {
+        try {
+          const response = await fetch(`${process.env.AUTH0_BASE_URL}${route}`);
+          results[route] = { 
+            status: response.ok ? 'ok' : 'error',
+            error: !response.ok ? `HTTP ${response.status}` : undefined
+          };
+        } catch (error) {
+          results[route] = {
+            status: 'error',
+            error: error instanceof Error ? error.message : 'Unknown error'
+          };
+        }
+      }
+    } catch (error) {
+      return {
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+
+    return results;
+  }
+
+  // Test environment variables
+  function testEnvironmentVariables() {
+    const required = [
+      'AUTH0_ISSUER_BASE_URL',
+      'AUTH0_CLIENT_ID',
+      'AUTH0_CLIENT_SECRET',
+      'AUTH0_SECRET',
+      'DATABASE_URL',
+      'REDIS_URL'
+    ];
+
+    return Object.fromEntries(
+      required.map(key => [
+        key,
+        { 
+          status: process.env[key] ? 'ok' : 'error',
+          error: !process.env[key] ? 'Missing' : undefined
+        }
+      ])
+    );
   }
 
   try {
-    const debugInfo = {
+    const diagnostics = {
       timestamp: new Date().toISOString(),
-      environment: {
-        variables: Object.keys(process.env).filter(key => 
-          key.startsWith('AUTH0_') || 
-          key.startsWith('NEXT_') || 
-          key.startsWith('VERCEL_') ||
-          key.startsWith('DATABASE_') ||
-          key.startsWith('REDIS_')
-        ),
-        values: isAdmin ? {
-          nodeEnv: process.env.NODE_ENV,
-          vercelEnv: process.env.VERCEL_ENV,
-          region: process.env.VERCEL_REGION,
-          auth0: {
-            baseUrl: process.env.AUTH0_BASE_URL,
-            issuerBaseUrl: process.env.AUTH0_ISSUER_BASE_URL,
-            hasClientId: !!process.env.AUTH0_CLIENT_ID,
-            hasClientSecret: !!process.env.AUTH0_CLIENT_SECRET,
-            hasSecret: !!process.env.AUTH0_SECRET
-          }
-        } : undefined
+      overview: {
+        environment: process.env.NODE_ENV,
+        nodeVersion: process.version,
+        deployment: {
+          url: process.env.VERCEL_URL,
+          environment: process.env.VERCEL_ENV,
+          region: process.env.VERCEL_REGION
+        }
       },
-      request: {
-        url: request.url,
-        method: request.method,
-        headers: Object.fromEntries(
-          Array.from(request.headers.entries())
-            .filter(([key]) => !key.toLowerCase().includes('authorization'))
-        )
-      },
-      system: getSystemInfo(),
-      connections: {
-        database: await testDatabaseConnection(),
-        redis: await testRedisConnection(),
-        auth0: await testAuth0Connection()
-      },
-      build: {
-        timestamp: new Date().toISOString(),
-        vercelEnv: process.env.VERCEL_ENV || 'local',
-        deploymentUrl: process.env.VERCEL_URL || 'localhost',
-        commitSha: process.env.VERCEL_GIT_COMMIT_SHA,
-        branch: process.env.VERCEL_GIT_COMMIT_REF,
-        projectId: process.env.VERCEL_PROJECT_ID
+      tests: {
+        environment: testEnvironmentVariables(),
+        database: await testDatabaseTables(),
+        redis: await testRedisOperations(),
+        auth0: await testAuth0Endpoints(),
+        api: await testAPIRoutes()
       }
     };
 
-    return new Response(JSON.stringify(debugInfo, null, 2), {
+    // Count failures - fixed the unused parameter
+    const failures = Object.entries(diagnostics.tests)
+      .flatMap(([category, tests]) => 
+        Object.entries(tests)
+          .filter(([, result]) => result.status === 'error')
+          .map(([name, result]) => ({
+            category,
+            name,
+            error: result.error
+          }))
+      );
+
+    return new Response(JSON.stringify({
+      ...diagnostics,
+      summary: {
+        total_tests: Object.values(diagnostics.tests)
+          .flatMap(tests => Object.keys(tests)).length,
+        failures: failures.length,
+        failed_components: failures
+      }
+    }, null, 2), {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
-    const errorResponse = {
+    return new Response(JSON.stringify({
       error: {
-        message: error instanceof Error ? error.message : 'An unknown error occurred',
-        stack: isAdmin ? (error instanceof Error ? error.stack : undefined) : undefined,
-        timestamp: new Date().toISOString(),
-        context: {
-          path: request.url,
-          method: request.method,
-          headers: isAdmin ? Object.fromEntries(
-            Array.from(request.headers.entries())
-              .filter(([key]) => !key.toLowerCase().includes('authorization'))
-          ) : undefined
-        }
+        message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString()
       }
-    };
-
-    return new Response(JSON.stringify(errorResponse, null, 2), {
+    }, null, 2), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     });
