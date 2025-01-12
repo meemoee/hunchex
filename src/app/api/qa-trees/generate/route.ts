@@ -165,11 +165,16 @@ EXTRACTION INSTRUCTIONS:
 
     if (!response.ok) return null;
 
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
     const collectedContent: string[] = [];
     let buffer = '';
 
-    for await (const chunk of response.body!) {
-      buffer += new TextDecoder().decode(chunk, { stream: true });
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
       let newlineIndex;
       
       while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
@@ -187,12 +192,15 @@ EXTRACTION INSTRUCTIONS:
               collectedContent.push(content);
             }
           } catch (error) {
-		  logger.error("JSON parsing error in stream:", error instanceof Error ? error.message : String(error));
+            logger.error("JSON parsing error in stream:", error instanceof Error ? error.message : String(error));
             continue;
           }
         }
       }
     }
+
+    // Flush any remaining content
+    buffer += decoder.decode(); // end-of-stream
 
     const fullResponse = collectedContent.join('');
     logger.debug('Collected full response:', fullResponse);
@@ -248,12 +256,22 @@ GENERATE A PRECISE, VERBATIM QUESTION CAPTURING THE FUNDAMENTAL MARKET UNCERTAIN
 
     if (!response.ok) return null;
 
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
     const collectedContent: string[] = [];
-    for await (const chunk of response.body!) {
-      const text = new TextDecoder().decode(chunk);
-      const lines = text.split('\n');
+    let buffer = '';
 
-      for (const line of lines) {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      let newlineIndex;
+      
+      while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+        const line = buffer.slice(0, newlineIndex);
+        buffer = buffer.slice(newlineIndex + 1);
+
         if (line.startsWith('data: ')) {
           const jsonStr = line.slice(6).trim();
           if (jsonStr === "[DONE]") break;
@@ -262,16 +280,18 @@ GENERATE A PRECISE, VERBATIM QUESTION CAPTURING THE FUNDAMENTAL MARKET UNCERTAIN
             const parsed = JSON.parse(jsonStr);
             const content = parsed.choices?.[0]?.delta?.content;
             if (content) {
-              process.stdout.write(content);
               collectedContent.push(content);
             }
           } catch (error) {
-		  logger.error("JSON parsing error in stream:", error instanceof Error ? error.message : String(error));
+            logger.error("JSON parsing error in stream:", error instanceof Error ? error.message : String(error));
             continue;
           }
         }
       }
     }
+
+    // Flush any remaining content
+    buffer += decoder.decode(); // end-of-stream
 
     const fullResponse = collectedContent.join('');
     const parsedQaPairs = await parseWithGemini(fullResponse);
@@ -332,12 +352,22 @@ EXTRACT ${nodesPerLayer} PRECISE SUB-QUESTIONS THAT:
 
     if (!response.ok) return null;
 
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
     const collectedContent: string[] = [];
-    for await (const chunk of response.body!) {
-      const text = new TextDecoder().decode(chunk);
-      const lines = text.split('\n');
+    let buffer = '';
 
-      for (const line of lines) {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      let newlineIndex;
+      
+      while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+        const line = buffer.slice(0, newlineIndex);
+        buffer = buffer.slice(newlineIndex + 1);
+
         if (line.startsWith('data: ')) {
           const jsonStr = line.slice(6).trim();
           if (jsonStr === "[DONE]") break;
@@ -349,12 +379,15 @@ EXTRACT ${nodesPerLayer} PRECISE SUB-QUESTIONS THAT:
               collectedContent.push(content);
             }
           } catch (error) {
-		  logger.error("JSON parsing error in stream:", error instanceof Error ? error.message : String(error));
+            logger.error("JSON parsing error in stream:", error instanceof Error ? error.message : String(error));
             continue;
           }
         }
       }
     }
+
+    // Flush any remaining content
+    buffer += decoder.decode(); // end-of-stream
 
     const fullResponse = collectedContent.join('');
     const parsedQaPairs = await parseWithGemini(fullResponse);
