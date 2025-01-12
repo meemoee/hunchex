@@ -29,8 +29,6 @@ export default function RightSidebar() {
       .join('\n');
   }
 
-  const [streamingMarkets, setStreamingMarkets] = useState<Market[]>([]);
-
 	const handleChatMessage = async (userMessage: string) => {
 	  if (!userMessage.trim() || isStreaming) return;
 	  
@@ -85,13 +83,6 @@ export default function RightSidebar() {
 					  console.log('New accumulated:', JSON.stringify(cleanedContent));
 					  setStreamingContent(cleanedContent);
 					  
-					  // Dynamically update visible markets based on accumulated content
-					  if (marketData.length > 0) {
-						const newFilteredMarkets = marketData.filter((market: Market) => 
-						  accumulatedContent.toLowerCase().includes(market.id.toLowerCase())
-						);
-						setStreamingMarkets(newFilteredMarkets);
-					  }
 					}
 				  }
 				} catch {
