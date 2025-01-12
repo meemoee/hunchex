@@ -58,6 +58,11 @@ type OrderbookData = {
   }
 }
 
+type OrderStatus = {
+  type: 'error' | 'success' | null;
+  message: string | null;
+}
+
 type OrderConfirmationProps = {
   isOpen: boolean
   mover: TopMover | null
@@ -100,6 +105,7 @@ export function OrderConfirmation({
   const [stopLossEnabled, setStopLossEnabled] = useState(false)
   const [takeProfitPrice, setTakeProfitPrice] = useState(0.75) // 75%
   const [stopLossPrice, setStopLossPrice] = useState(0.25) // 25%
+  const [orderStatus, setOrderStatus] = useState<OrderStatus>({ type: null, message: null })
   const { user } = useUser()
 
   const handleSubmitOrder = async () => {
@@ -626,6 +632,11 @@ export function OrderConfirmation({
           </div>
         )}
 
+        {orderStatus.type === 'error' && (
+          <div className="text-red-500 text-sm text-center mt-2">
+            {orderStatus.message}
+          </div>
+        )}
         <div className="flex gap-4 mt-6">
           <button
             onClick={handleSubmitOrder}
@@ -634,7 +645,10 @@ export function OrderConfirmation({
             Confirm
           </button>
           <button
-            onClick={onClose}
+            onClick={() => {
+              setOrderStatus({ type: null, message: null });
+              onClose();
+            }}
             className="flex-1 bg-red-600 text-white p-3 rounded font-bold hover:bg-red-700 transition-colors"
           >
             Cancel
