@@ -624,11 +624,11 @@ const TopMoversList: React.FC<TopMoversListProps> = ({
                             </>
                           ))
                         ) : (
-                          JSON.parse(mover.outcomes.replace(/&apos;/g, '"')).map((outcome: string, i: number) => (
+                          JSON.parse(mover.outcomes.replace(/&apos;/g, '"')).map((outcome: string) => (
                             <>
                               <button
                                 key={outcome}
-                                className={`${i === 0 ? 'action-buy text-green-600' : 'action-sell text-red-600'} flex flex-col items-center p-1 font-bold w-full overflow-hidden`}
+                                className={`${index === 0 ? 'action-buy text-green-600' : 'action-sell text-red-600'} flex flex-col items-center p-1 font-bold w-full overflow-hidden`}
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   handleBuySell(outcome.toUpperCase(), mover)
