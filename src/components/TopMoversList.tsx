@@ -42,7 +42,7 @@ interface TimeInterval {
 interface TopMoversListProps {
   topMovers: TopMover[]
   error: string | null
-  timeIntervals: TimeInterval[]
+  timeIntervals: readonly TimeInterval[]
   selectedInterval: string
   onIntervalChange: (interval: string) => void
   onLoadMore: () => void
@@ -57,7 +57,7 @@ interface TopMoversListProps {
 }
 
 interface PriceHistory {
-  time: string
+  time: number
   price: number
 }
 
@@ -108,7 +108,7 @@ async function fetchPriceHistory(marketId: string, interval: string = '1d'): Pro
       time: Math.floor(new Date(item.t).getTime() / 1000),
       price: item.y * 100
     }))
-    .sort((a, b) => a.time - b.time)
+    .sort((a: PriceHistory, b: PriceHistory) => a.time - b.time)
 }
 
 // Mobile-friendly styles
@@ -142,10 +142,6 @@ const TopMoversList: React.FC<TopMoversListProps> = ({
   const [loadingHistories, setLoadingHistories] = useState<Record<string, boolean>>({})
   const [chartIntervals, setChartIntervals] = useState<Record<string, string>>({})
   const [hoverTimeout, setHoverTimeout] = useState<NodeJS.Timeout | null>(null)
-  const [orderStatus, setOrderStatus] = useState<{
-    type: 'success' | 'error' | null;
-    message: string;
-  }>({ type: null, message: '' })
   const [preloadedData, setPreloadedData] = useState<Record<string, PriceHistory[]>>({})
   const wsRef = useRef<WebSocket | null>(null)
   const [search, setSearch] = useState<SearchState>({
@@ -156,28 +152,32 @@ const TopMoversList: React.FC<TopMoversListProps> = ({
     isLoading: false
   })
   const [orderConfirmation, setOrderConfirmation] = useState<{
-    isOpen: boolean;
-    mover: TopMover | null;
-    action: string;
-    amount: string;
-    price: number;
-    orderbook: OrderbookData | null;
-  }>({
-    isOpen: false,
-    mover: null,
-    action: '',
-    amount: '',
-    price: 0,
-    orderbook: null
-  })
+		isOpen: boolean;
+		mover: TopMover | null;
+		selectedOutcome: string;
+		action: string;
+		amount: string;
+		price: number;
+		orderbook: OrderbookData | null;
+	}>({
+		isOpen: false,
+		mover: null,
+		selectedOutcome: '',
+		action: '',
+		amount: '',
+		price: 0,
+		orderbook: null
+	})
 
   const handleBuySell = async (action: string, mover: TopMover) => {
 	  console.log('==== HANDLE BUY/SELL DEBUG START ====');
 	  
 	  // Parse outcomes consistently
-	  const outcomes = Array.isArray(mover.outcomes) ? 
-		mover.outcomes : 
-		JSON.parse(mover.outcomes.replace(/'/g, '"'));
+	  const outcomes = mover.outcomes 
+		? (Array.isArray(mover.outcomes)
+		  ? mover.outcomes
+		  : JSON.parse(mover.outcomes.replace(/&apos;/g, '"')))
+		: ['YES', 'NO'];
 
 	  // Determine the action and side based on outcomes
 	  const firstOutcome = outcomes[0];
@@ -264,14 +264,21 @@ const TopMoversList: React.FC<TopMoversListProps> = ({
 	  if (shouldSubmitOrder && orderConfirmation.mover && orderConfirmation.orderbook) {
 		try {
 		  // Parse outcomes consistently
-		  const outcomes = Array.isArray(orderConfirmation.mover.outcomes) ? 
-			orderConfirmation.mover.outcomes : 
-			JSON.parse(orderConfirmation.mover.outcomes.replace(/'/g, '"'));
+		  const outcomes = orderConfirmation.mover.outcomes
+            ? Array.isArray(orderConfirmation.mover.outcomes)
+              ? orderConfirmation.mover.outcomes
+              : JSON.parse(orderConfirmation.mover.outcomes.replace(/&apos;/g, '"'))
+            : ['YES', 'NO'];
 
-		  // Parse token IDs consistently
-		  const tokenIds = Array.isArray(orderConfirmation.mover.clobtokenids) ?
-			orderConfirmation.mover.clobtokenids :
-			JSON.parse(orderConfirmation.mover.clobtokenids);
+			// Parse token IDs consistently
+			if (!orderConfirmation.mover.clobtokenids) {
+			  throw new Error('No token IDs available for this market');
+			}
+
+			const rawTokenIds = orderConfirmation.mover.clobtokenids as (string[] | string);
+			const tokenIds = Array.isArray(rawTokenIds)
+			  ? rawTokenIds
+			  : JSON.parse((rawTokenIds as string).replace(/&apos;/g, '"'));
 
 		  // Map the action to the corresponding outcome
 		  const outcomeIndex = orderConfirmation.action === 'buy' ? 0 : 1;
@@ -319,20 +326,13 @@ const TopMoversList: React.FC<TopMoversListProps> = ({
 		  const result = await response.json();
 		  console.log('Order submission result:', result);
 
-		  setOrderStatus({
-			type: 'success',
-			message: 'Order submitted successfully!'
-		  });
+
 		  
 		  onOrderSuccess?.();
 		  onRefreshUserData?.();
 		  
 		} catch (error) {
 		  console.error('Order submission error:', error);
-		  setOrderStatus({
-			type: 'error',
-			message: error instanceof Error ? error.message : 'Failed to submit order'
-		  });
 		}
 	  }
 
@@ -357,7 +357,7 @@ const TopMoversList: React.FC<TopMoversListProps> = ({
       
       const processedTickers = data.tickers.map((ticker: TickerData) => ({
         ...ticker,
-        price_change_percent: parseFloat(ticker.price_change_percent),
+        price_change_percent: ticker.price_change_percent || 0,
         volume: ticker.volume || 0,
         volume_change: ticker.volume_change || 0,
         volume_change_percentage: ticker.volume_change_percentage || 0
@@ -422,8 +422,9 @@ const TopMoversList: React.FC<TopMoversListProps> = ({
         if (preloadedData[marketId]) {
           setPriceHistories(prev => ({ ...prev, [marketId]: preloadedData[marketId] }))
           setPreloadedData(prev => {
-            const { [marketId]: _removed, ...rest } = prev
-            return rest
+            const newState = { ...prev }
+			delete newState[marketId]
+			return newState
           })
         } else if (!priceHistories[marketId]) {
           setLoadingHistories(prev => ({ ...prev, [marketId]: true }))
@@ -466,7 +467,7 @@ const TopMoversList: React.FC<TopMoversListProps> = ({
       <div className="sticky top-14 bg-[#1a1b1e] px-4 py-4 z-40 border-b border-l border-r border-white/10 rounded-b-lg mb-6">
         <div className="flex items-center justify-between gap-2 mb-2">
           <div className="flex items-center space-x-2">
-            <span className="text-2xl font-bold">What's happened in the last</span>
+            <span className="text-2xl font-bold">What&apos;s happened in the last</span>
             <div className="relative">
               <button
                 onClick={(e) => {
@@ -481,7 +482,7 @@ const TopMoversList: React.FC<TopMoversListProps> = ({
 
               {isTimeIntervalDropdownOpen && (
                 <div className="absolute top-full left-0 mt-2 py-2 bg-[#1a1b1e]/80 rounded-xl shadow-2xl border border-white/10 w-40 animate-in slide-in-from-top-2 duration-300 ease-out backdrop-blur-2xl z-50">
-                  {timeIntervals.map((interval, index) => (
+                  {timeIntervals.map((interval) => (
                     <button
                       key={interval.value}
                       className={`w-full px-3 py-2 text-left hover:bg-white/10 transition-colors flex items-center justify-between group ${
@@ -619,7 +620,7 @@ const TopMoversList: React.FC<TopMoversListProps> = ({
 									}
 								</span>
                               </button>
-                              {i === 0 && mover.outcomes && (Array.isArray(mover.outcomes) ? mover.outcomes.length > 1 : JSON.parse(mover.outcomes.replace(/'/g, '"')).length > 1) && (
+                              {i === 0 && mover.outcomes && (Array.isArray(mover.outcomes) ? mover.outcomes.length > 1 : JSON.parse(mover.outcomes.replace(/&apos;/g, '"')).length > 1) && (
                                 <div className="action-separator text-gray-600 flex items-center justify-center h-full">
                                   |
                                 </div>
@@ -650,7 +651,7 @@ const TopMoversList: React.FC<TopMoversListProps> = ({
 								  }
 								</span>
 							  </button>
-							  {i === 0 && JSON.parse(mover.outcomes.replace(/&apos;/g, '"')).length > 1 && (
+							  {i === 0 && mover.outcomes && typeof mover.outcomes === 'string' && JSON.parse(mover.outcomes.replace(/&apos;/g, '"')).length > 1 && (
 								<div className="action-separator text-gray-600 flex items-center justify-center h-full">
 								  |
 								</div>
@@ -869,23 +870,22 @@ const TopMoversList: React.FC<TopMoversListProps> = ({
       )}
 
       <OrderConfirmation 
-        isOpen={orderConfirmation.isOpen}
-        mover={orderConfirmation.mover}
-        selectedOutcome={orderConfirmation.selectedOutcome}
-        action={orderConfirmation.action}
-        amount={orderConfirmation.amount}
-        price={orderConfirmation.price}
-        orderbook={orderConfirmation.orderbook}
-        onClose={handleModalClose}
-        onAmountChange={(amount) => setOrderConfirmation(prev => ({...prev, amount}))}
-        onPriceChange={(price) => setOrderConfirmation(prev => ({...prev, price}))}
-        onConfirm={() => handleModalClose(true)}
-        onOrderSuccess={() => onOrderSuccess?.()}
-        onRefreshUserData={() => onRefreshUserData?.()}
-        orderStatus={orderStatus}
-        setOrderStatus={setOrderStatus}
-        balance={balance}
-      />
+	  isOpen={orderConfirmation.isOpen}
+	  mover={orderConfirmation.mover}
+	  selectedOutcome={orderConfirmation.selectedOutcome}
+	  // Remove action prop - managed internally
+	  amount={orderConfirmation.amount}
+	  price={orderConfirmation.price}
+	  orderbook={orderConfirmation.orderbook}
+	  onClose={handleModalClose}
+	  onAmountChange={(amount) => setOrderConfirmation(prev => ({...prev, amount}))}
+	  onPriceChange={(price) => setOrderConfirmation(prev => ({...prev, price}))}
+	  // Remove onConfirm - using onClose instead
+	  onOrderSuccess={() => onOrderSuccess?.()}
+	  onRefreshUserData={() => onRefreshUserData?.()}
+	  // Remove orderStatus and setOrderStatus - managed internally
+	  balance={balance}
+	/>
     </div>
   )
 }

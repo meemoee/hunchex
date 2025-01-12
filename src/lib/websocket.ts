@@ -1,259 +1,100 @@
-// src/lib/websocket.ts
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useUser } from '@auth0/nextjs-auth0/client';
+import { useState, useEffect, useCallback } from 'react';
+import { WSMessage } from '../types/websocket';
 
-// Singleton WebSocket manager
-class WebSocketManager {
-  private static instance: WebSocketManager;
-  private socket: WebSocket | null = null;
-  private messageHandlers = new Set<MessageCallback>();
-  private activeSubscriptions = new Set<string>();
-  private retryCount = 0;
-  private reconnectTimeout: NodeJS.Timeout | null = null;
-  private connectionCount = 0;
-  private userId: string | null = null;
-
-  private constructor() {}
-
-  static getInstance(): WebSocketManager {
-    if (!WebSocketManager.instance) {
-      WebSocketManager.instance = new WebSocketManager();
-    }
-    return WebSocketManager.instance;
-  }
-
-  private createConnection(userId: string) {
-    if (this.socket?.readyState === WebSocket.OPEN) return;
-
-    this.userId = userId;
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.hostname === 'localhost' ? 'localhost:3000' : window.location.host;
-    const wsUrl = new URL(`${protocol}//${host}/api/ws`);
-    wsUrl.searchParams.set('token', userId);
-
-    console.log('Creating WebSocket connection:', {
-      url: wsUrl.toString(),
-      retryCount: this.retryCount
-    });
-
-    this.socket = new WebSocket(wsUrl);
-    this.setupSocketHandlers();
-  }
-
-  private setupSocketHandlers() {
-    if (!this.socket) return;
-
-    this.socket.onopen = () => {
-      console.log('WebSocket connected successfully');
-      this.retryCount = 0;
-      
-      // Resubscribe to active streams
-      this.activeSubscriptions.forEach(sub => {
-        const [marketId, side] = sub.split('-');
-        this.send({
-          type: 'subscribe_orderbook',
-          marketId,
-          side
-        });
-      });
-    };
-
-    this.socket.onclose = (event) => {
-      console.log('WebSocket closed:', event);
-      
-      if (document.visibilityState === 'visible' && this.retryCount < MAX_RETRIES) {
-        const backoffDelay = Math.min(
-          INITIAL_RETRY_DELAY * Math.pow(2, this.retryCount),
-          MAX_BACKOFF_DELAY
-        );
-        
-        this.clearReconnectTimeout();
-        this.reconnectTimeout = setTimeout(() => {
-          this.retryCount++;
-          if (this.userId) this.createConnection(this.userId);
-        }, backoffDelay);
-      }
-    };
-
-    this.socket.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type) {
-          this.messageHandlers.forEach(handler => {
-            try {
-              handler(data.type as UpdateType, data);
-            } catch (error) {
-              console.error('Error in message handler:', error);
-            }
-          });
-        }
-      } catch (error) {
-        console.error('Error processing WebSocket message:', error);
-      }
-    };
-
-    this.socket.onerror = (error) => {
-      console.error('WebSocket error:', error);
-    };
-  }
-
-  connect(userId: string) {
-    this.connectionCount++;
-    console.log('Connection requested, count:', this.connectionCount);
-    if (this.connectionCount === 1) {
-      this.createConnection(userId);
-    }
-  }
-
-  disconnect() {
-    this.connectionCount--;
-    console.log('Disconnect requested, count:', this.connectionCount);
-    if (this.connectionCount === 0) {
-      this.cleanup();
-    }
-  }
-
-  private cleanup() {
-    this.clearReconnectTimeout();
-    if (this.socket?.readyState === WebSocket.OPEN) {
-      this.socket.close();
-    }
-    this.socket = null;
-  }
-
-  private clearReconnectTimeout() {
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
-      this.reconnectTimeout = null;
-    }
-  }
-
-  send(data: any) {
-    if (this.socket?.readyState === WebSocket.OPEN) {
-      this.socket.send(JSON.stringify(data));
-    }
-  }
-
-  subscribeToOrderbook(marketId: string, side: 'YES' | 'NO') {
-    const subKey = `${marketId}-${side}`;
-    this.activeSubscriptions.add(subKey);
-    this.send({
-      type: 'subscribe_orderbook',
-      marketId,
-      side
-    });
-  }
-
-  unsubscribeFromOrderbook(marketId: string, side: 'YES' | 'NO') {
-    const subKey = `${marketId}-${side}`;
-    this.activeSubscriptions.delete(subKey);
-    this.send({
-      type: 'unsubscribe_orderbook',
-      marketId,
-      side
-    });
-  }
-
-  addMessageHandler(handler: MessageCallback) {
-    this.messageHandlers.add(handler);
-  }
-
-  removeMessageHandler(handler: MessageCallback) {
-    this.messageHandlers.delete(handler);
-  }
-
-  get isConnected() {
-    return this.socket?.readyState === WebSocket.OPEN;
-  }
+interface PriceUpdateData {
+  market_id: string;
+  last_traded_price: number;
+  yes_price: number;
+  no_price: number;
+  volume: number;
 }
 
-const wsManager = WebSocketManager.getInstance();
+interface BalanceUpdateData {
+  balance: number;
+}
 
-type WebSocketState = {
-  isConnected: boolean;
-  error: Error | null;
-};
+interface OrderExecutionData {
+  needsHoldingsRefresh: boolean;
+}
 
-type UpdateType = 
-  | 'holdings_update' 
-  | 'orders_update' 
-  | 'balance_update' 
-  | 'orderbook_update' 
-  | 'price_update'
-  | 'error';
+type WSUpdateData = {
+  price_update: PriceUpdateData;
+  balance_update: BalanceUpdateData;
+  holdings_update: Record<string, never>;
+  orders_update: Record<string, never>;
+  order_execution: OrderExecutionData;
+}
 
-type MessageCallback = (type: UpdateType, data: any) => void;
+type UpdateHandler = <T extends keyof WSUpdateData>(type: T, data: WSUpdateData[T]) => void;
 
-type StreamSubscription = {
-  marketId: string;
-  side: 'YES' | 'NO';
-};
-
-const MAX_RETRIES = 5;
-const MAX_BACKOFF_DELAY = 30000; // 30 seconds
-const INITIAL_RETRY_DELAY = 1000; // 1 second
+export type { WSUpdateData, PriceUpdateData, BalanceUpdateData, OrderExecutionData };
 
 export function useWebSocket() {
-  const [state, setState] = useState<WebSocketState>({
-    isConnected: false,
-    error: null
-  });
-  const { user, isLoading } = useUser();
+  const [socket, setSocket] = useState<WebSocket | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [updateHandlers, setUpdateHandlers] = useState<UpdateHandler[]>([]);
 
   useEffect(() => {
-    if (!user?.sub || isLoading) return;
+    const ws = new WebSocket('ws://localhost:3000/api/ws');
 
-    wsManager.connect(user.sub);
-    
-    const checkConnection = () => {
-      setState({
-        isConnected: wsManager.isConnected,
-        error: null
-      });
+    ws.onopen = () => {
+      console.log('Connected to WebSocket');
+      setIsConnected(true);
+      ws.send(JSON.stringify({
+        type: 'hello'
+      } satisfies WSMessage));
     };
 
-    // Check connection status periodically
-    const interval = setInterval(checkConnection, 1000);
-    checkConnection();
-
-    return () => {
-      clearInterval(interval);
-      wsManager.disconnect();
+    ws.onmessage = (event) => {
+      console.log('Received:', event.data);
+      try {
+        const message = JSON.parse(event.data) as { type: keyof WSUpdateData; data: WSUpdateData[keyof WSUpdateData] };
+        // Notify all subscribers with proper typing
+        updateHandlers.forEach(handler => {
+          // Type assertion needed here as TypeScript cannot infer the relationship
+          // between message.type and message.data
+          handler(message.type, message.data as WSUpdateData[typeof message.type]);
+        });
+      } catch (error) {
+        console.error('Error parsing WebSocket message:', error);
+      }
     };
-  }, [user, isLoading]);
 
-  const subscribeToOrderbook = useCallback((marketId: string, side: 'YES' | 'NO') => {
-    wsManager.subscribeToOrderbook(marketId, side);
-  }, []);
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      setIsConnected(false);
+    };
 
-  const unsubscribeFromOrderbook = useCallback((marketId: string, side: 'YES' | 'NO') => {
-    wsManager.unsubscribeFromOrderbook(marketId, side);
-  }, []);
+    ws.onclose = () => {
+      console.log('WebSocket closed');
+      setIsConnected(false);
+    };
 
-  const subscribeToUpdates = useCallback((callback: MessageCallback) => {
-    wsManager.addMessageHandler(callback);
+    setSocket(ws);
+
     return () => {
-      wsManager.removeMessageHandler(callback);
+      ws.close();
+      setIsConnected(false);
+    };
+  }, [updateHandlers]);
+
+  const sendMessage = useCallback((data: WSMessage) => {
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify(data));
+    }
+  }, [socket]);
+
+  const subscribeToUpdates = useCallback((handler: UpdateHandler) => {
+    setUpdateHandlers(prev => [...prev, handler]);
+    return () => {
+      setUpdateHandlers(prev => prev.filter(h => h !== handler));
     };
   }, []);
 
   return {
-    isConnected: state.isConnected,
-    error: state.error,
-    subscribeToOrderbook,
-    unsubscribeFromOrderbook,
+    socket,
+    isConnected,
+    sendMessage,
     subscribeToUpdates
   };
-}
-
-// Helper hook for orderbook subscriptions
-export function useOrderbookSubscription(marketId: string | null, side: 'YES' | 'NO' | null) {
-  const { subscribeToOrderbook, unsubscribeFromOrderbook } = useWebSocket();
-
-  useEffect(() => {
-    if (!marketId || !side) return;
-
-    subscribeToOrderbook(marketId, side);
-    return () => unsubscribeFromOrderbook(marketId, side);
-  }, [marketId, side, subscribeToOrderbook, unsubscribeFromOrderbook]);
 }

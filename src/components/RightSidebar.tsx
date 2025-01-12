@@ -220,7 +220,6 @@ export default function RightSidebar() {
           <div className="space-y-4 mb-20">
             {messages.map((message, index) => (
               <div key={index} className="bg-[#2c2e33] p-3 rounded-lg">
-                {console.log('Rendering message:', message)}
                 {message.type === 'markets' && message.markets ? (
                   <div className="space-y-2">
                     {Array.isArray(message.markets) && message.markets.map((market, idx) => (

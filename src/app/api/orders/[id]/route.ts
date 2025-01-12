@@ -1,64 +1,53 @@
 import { getSession } from "@auth0/nextjs-auth0/edge";
-import { cookies } from "next/headers";
 import { db } from "@/app/db";
 import { orders } from "@/app/db/schema";
 import { and, eq } from "drizzle-orm";
-import { NextResponse } from "next/server";
+
+export const runtime = 'edge';
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  console.log('DELETE request received for order:', params.id);
+  const { id } = await params;
+  const session = await getSession();
   
-  const cookieStore = cookies();
-  const session = await getSession({ cookies: () => cookieStore });
-
-  console.log('Session user:', session?.user?.sub);
-
   if (!session?.user) {
-    console.log('Unauthorized - No session user');
-    return new Response("Unauthorized", { status: 401 });
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 
   try {
-    console.log('Checking if order exists...');
-    // First verify the order exists and belongs to the user
     const ordersToCancel = await db
       .select()
       .from(orders)
       .where(
         and(
-          eq(orders.id, params.id),
+          eq(orders.id, id),
           eq(orders.user_id, session.user.sub),
           eq(orders.status, 'active')
         )
       );
 
-    console.log('Found orders:', ordersToCancel);
-
     if (ordersToCancel.length === 0) {
-      console.log('No active orders found for cancellation');
-      return NextResponse.json(
-        { error: "Order not found or already cancelled" },
-        { status: 404 }
-      );
+      return new Response(JSON.stringify({ error: "Order not found or already cancelled" }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
-    console.log('Attempting to cancel order...');
-
-    // Update order status to cancelled
     await db
       .update(orders)
       .set({ status: 'cancelled' })
       .where(
         and(
-          eq(orders.id, params.id),
+          eq(orders.id, id),
           eq(orders.user_id, session.user.sub)
         )
       );
 
-    // Invalidate the active orders cache
     const response = await fetch('/api/invalidate-holdings', {
       method: 'POST',
       headers: {
@@ -71,12 +60,15 @@ export async function DELETE(
       console.error('Failed to invalidate holdings cache');
     }
 
-    return NextResponse.json({ message: "Order cancelled successfully" });
+    return new Response(JSON.stringify({ message: "Order cancelled successfully" }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
   } catch (error) {
     console.error('Error cancelling order:', error);
-    return NextResponse.json(
-      { error: "Failed to cancel order" },
-      { status: 500 }
-    );
+    return new Response(JSON.stringify({ error: "Failed to cancel order" }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 }

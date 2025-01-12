@@ -42,6 +42,7 @@
     "@visx/xychart": "^3.12.0",
     "@visx/zoom": "^3.12.0",
     "clsx": "^2.1.1",
+    "crypto": "^1.0.1",
     "decimal.js": "^10.4.3",
     "drizzle-kit": "^0.30.1",
     "express-oauth2-jwt-bearer": "^1.6.0",

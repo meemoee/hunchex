@@ -1,12 +1,12 @@
 import { getSession } from "@auth0/nextjs-auth0/edge";
-import { cookies } from "next/headers";
 import { db } from "@/app/db";
 import { holdings, markets } from "@/app/db/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+
+export const runtime = 'edge';
 
 export async function GET() {
-  const cookieStore = cookies();
-  const session = await getSession({ cookies: () => cookieStore });
+  const session = await getSession();
 
   if (!session?.user) {
     return new Response("Unauthorized", { status: 401 });

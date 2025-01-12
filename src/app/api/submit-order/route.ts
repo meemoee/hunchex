@@ -1,6 +1,6 @@
-import { cookies } from 'next/headers';
 import { getSession } from '@auth0/nextjs-auth0/edge';
-import { NextResponse } from 'next/server';
+
+export const runtime = 'edge';
 
 export async function POST(request: Request) {
   console.log('\n=== Next.js Order Submission START ===');
@@ -8,19 +8,16 @@ export async function POST(request: Request) {
   console.log(`Request ID: ${requestId}`);
   
   try {
-    // Get session and validate authentication
-    const cookieStore = cookies();
-    const session = await getSession({ cookies: () => cookieStore });
+    const session = await getSession();
 
     if (!session?.user) {
       console.log(`[${requestId}] Unauthorized request - no valid session`);
-      return new NextResponse(
-        JSON.stringify({ error: 'Unauthorized' }), 
-        { status: 401 }
-      );
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
-    // Parse order data
     const orderData = await request.json();
     console.log(`[${requestId}] Order data received:`, {
       marketId: orderData.marketId,
@@ -31,7 +28,6 @@ export async function POST(request: Request) {
       price: orderData.price
     });
 
-    // Forward to Express backend
     const response = await fetch(`${process.env.EXPRESS_API_URL}/api/submit-order`, {
       method: 'POST',
       headers: {
@@ -47,17 +43,15 @@ export async function POST(request: Request) {
     
     if (!response.ok) {
       console.error(`[${requestId}] Order submission failed:`, responseData);
-      return new NextResponse(
-        JSON.stringify(responseData),
-        { status: response.status }
-      );
+      return new Response(JSON.stringify(responseData), { 
+        status: response.status,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
-    // Enhance response with client-side guidance
-    // Always include full order details and refresh flags
     const enhancedResponse = {
       ...responseData,
-      needsHoldingsRefresh: true, // Always refresh for consistency
+      needsHoldingsRefresh: true,
       shouldRefreshOrders: true,
       requestId,
       orderType: orderData.orderType,
@@ -82,23 +76,27 @@ export async function POST(request: Request) {
       shouldRefreshOrders: true
     });
 
-    return NextResponse.json(enhancedResponse);
-  } catch (error) {
+    return new Response(JSON.stringify(enhancedResponse), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error: unknown) {
+    // Type-safe error logging
     console.error(`[${requestId}] Order submission error:`, {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
-      cause: error.cause
+      name: error instanceof Error ? error.name : 'Unknown Error',
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      cause: error instanceof Error ? error.cause : undefined
     });
     
-    return new NextResponse(
-      JSON.stringify({ 
-        error: 'Internal server error', 
-        details: error.message,
-        requestId 
-      }),
-      { status: 500 }
-    );
+    return new Response(JSON.stringify({ 
+      error: 'Internal server error', 
+      details: error instanceof Error ? error.message : String(error),
+      requestId 
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
   } finally {
     console.log(`[${requestId}] === Next.js Order Submission END ===\n`);
   }

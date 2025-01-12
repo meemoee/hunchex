@@ -1,7 +1,8 @@
 // src/app/api/qa-trees/route.ts
-import { NextResponse } from 'next/server';
 import { getSession } from '@auth0/nextjs-auth0/edge';
 import { neon } from '@neondatabase/serverless';
+
+export const runtime = 'edge';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -11,16 +12,22 @@ export async function GET(request: Request) {
   try {
     const session = await getSession();
     if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
     const { searchParams } = new URL(request.url);
     const marketId = searchParams.get('marketId');
 
     if (!marketId) {
-      return NextResponse.json({ 
+      return new Response(JSON.stringify({ 
         error: 'Market ID required'
-      }, { status: 400 });
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
     const trees = await sql`
@@ -43,12 +50,19 @@ export async function GET(request: Request) {
       firstTreeId: trees[0]?.id
     });
 
-    return NextResponse.json(trees);
+    return new Response(JSON.stringify(trees), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+
   } catch (error) {
     console.error('Error fetching QA trees:', error);
-    return NextResponse.json({ 
+    return new Response(JSON.stringify({ 
       error: 'Failed to fetch QA trees',
       details: error instanceof Error ? error.message : String(error)
-    }, { status: 500 });
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 }

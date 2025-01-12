@@ -1,0 +1,414 @@
+THE STATE OF THE DIRECTORY AT THE BEGINNING OF TODAY:
+
+
+
+Core Structure & Layout
+
+src/app/layout.tsx: This is the root layout component. It wraps the entire application with:
+UserProvider from @auth0/nextjs-auth0/client: This sets up the authentication context, making user data available throughout the app.
+Basic HTML structure (<html>, <body>).
+src/app/page.tsx: This is the main page of the application. It renders the MoversPage component.
+src/app/globals.css: Global CSS styles using Tailwind CSS. Defines basic colors and fonts.
+2. Main Components
+
+src/components/MoversPage.tsx: This component is the entry point for the main application logic. It renders the MoversListPage component.
+src/components/MoversListPage.tsx: This is the core component that displays the list of "movers" (markets with price changes). It handles:
+Fetching and displaying market data.
+User authentication and data fetching.
+Search functionality.
+Order placement.
+Price history charts.
+Question/Answer trees.
+Interactions with the right sidebar.
+src/components/TopMoversList.tsx: This component is responsible for rendering the list of top movers. It includes:
+Displaying individual market information (price, change, volume, etc.).
+Handling market expansion to show charts and Q&A trees.
+Order placement UI.
+Loading more markets.
+src/components/RightSidebar.tsx: This component provides a chat interface for user interaction. It handles:
+Displaying chat messages.
+Sending user messages.
+Receiving and displaying AI-generated responses.
+Displaying market information within the chat.
+src/components/QATree.tsx: This component displays a question and answer tree for a given market. It handles:
+Rendering the tree structure.
+Node selection and editing.
+Saving and loading trees.
+Expanding nodes with AI-generated content.
+src/components/GradientLogo.tsx: A simple component that renders the "Kalshi" logo with a gradient effect.
+src/components/PriceChart.tsx: A component that renders a price chart for a given market.
+src/components/OrderConfirmation.tsx: A modal component for confirming order details before placement.
+3. Data & Logic
+
+src/app/db/redis.ts: Sets up a connection to a Redis database using Upstash.
+src/app/db/schema.ts: Defines the database schema using Drizzle ORM for PostgreSQL. Includes tables for:
+users
+holdings
+orders
+markets
+market_prices
+src/lib/utils.ts: Utility functions for:
+Class name merging (cn).
+Price formatting (formatPrice).
+Volume change formatting (formatVolumeChange).
+src/lib/websocket.ts: A custom hook for managing WebSocket connections.
+src/types/mover.ts: Defines the TopMover type.
+4. Key Flows
+
+Authentication:
+The UserProvider in layout.tsx handles user authentication using Auth0.
+Components use the useUser hook to access user data.
+Market Data Fetching:
+MoversListPage fetches initial market data and updates it via websocket.
+TopMoversList displays the market data.
+Price history is fetched on demand when a market is expanded.
+User Data Fetching:
+MoversListPage fetches user-specific data (balance, holdings, active orders) on mount and when needed.
+Search:
+TopMoversList handles search queries and displays results.
+Order Placement:
+TopMoversList handles buy/sell actions.
+OrderConfirmation displays a modal for order confirmation.
+Q&A Tree:
+QATree displays a question and answer tree for a given market.
+Users can edit nodes, save trees, and expand nodes with AI-generated content.
+Chat:
+RightSidebar handles user input and displays chat messages.
+It interacts with an AI model to generate responses.
+It can also display market information within the chat.
+5. Functionality Breakdown
+
+Displaying Movers: The app fetches and displays a list of markets with the biggest price changes.
+User Authentication: Users can log in and their data is managed using Auth0.
+Real-time Updates: The app uses WebSockets to receive real-time updates on market prices.
+Trading: Users can place buy and sell orders on the markets.
+Market Analysis: Users can view price history charts and explore Q&A trees for each market.
+AI Chat: Users can interact with an AI assistant to get information and insights.
+Customization: Users can save and load their Q&A trees.
+Simplified Flow Diagram
+
+[User] --> [MoversPage] --> [MoversListPage]
+                                  |
+                                  |--> [TopMoversList]
+                                  |       |
+                                  |       |--> [PriceChart]
+                                  |       |--> [QATree]
+                                  |       |--> [OrderConfirmation]
+                                  |
+                                  |--> [RightSidebar]
+                                  |
+                                  |--> [Auth0]
+                                  |
+                                  |--> [Backend API]
+                                  |
+                                  |--> [Redis]
+                                  |
+                                  |--> [PostgreSQL]
+Key Technologies
+
+Next.js: React framework for building the application.
+Tailwind CSS: Utility-first CSS framework for styling.
+Auth0: Authentication service.
+Upstash Redis: Serverless Redis database.
+Drizzle ORM: TypeScript ORM for database interactions.
+WebSockets: For real-time data updates.
+Lucide React: Icon library.
+Further Notes
+
+The code uses dynamic imports (next/dynamic) to improve performance by lazy-loading components.
+The code uses a combination of local state and server-side data fetching.
+The code includes error handling and loading states.
+
+
+
+BACKEND:
+
+Core Structure & Setup
+
+dataServer.js: This is the main file for the backend server. It sets up:
+Express.js application.
+CORS middleware for cross-origin requests.
+JSON body parsing.
+Security headers.
+WebSocket server.
+Database connection (PostgreSQL via Neon, Redis via Upstash).
+Authentication middleware (Auth0).
+Order management system.
+External API integrations (Polymarket, Kalshi, OpenAI, Perplexity).
+Various API endpoints for data retrieval, analysis, and user interactions.
+2. Key Modules & Classes
+
+express: Web framework for handling HTTP requests.
+cors: Middleware for enabling cross-origin resource sharing.
+@neondatabase/serverless: PostgreSQL client for Neon serverless database.
+moment: Library for date and time manipulation.
+child_process: Node.js module for running external scripts (Python, JavaScript).
+./orderManager.js: Manages order placement, execution, and tracking.
+./perpanalysis.js: Handles market analysis using external scripts.
+./polyOrderbook.js: Manages Polymarket orderbook data.
+ws: WebSocket library for real-time communication.
+http: Node.js module for creating HTTP servers.
+./polymarketStream.js: Handles real-time data streaming from Polymarket.
+./kalshiStream.js: Handles real-time data streaming from Kalshi.
+axios: HTTP client for making requests to external APIs.
+openai: OpenAI API client for generating embeddings.
+express-oauth2-jwt-bearer: Middleware for Auth0 JWT verification.
+uuid: Library for generating unique IDs.
+node-fetch: Library for making HTTP requests.
+./LLMpandasSimple.js: Handles LLM-based query processing and result synthesis.
+decimal.js: Library for precise decimal arithmetic.
+./serverUtils.js: Contains utility functions for database interactions, caching, and data processing.
+3. Data Storage
+
+PostgreSQL (Neon): Used for storing:
+User data (users, balances, holdings, orders).
+Market data (markets, prices, embeddings).
+Analysis results (timeline, key figures, news).
+QA trees.
+Redis (Upstash): Used for caching:
+Top movers data.
+Market data.
+User value history.
+Similar markets.
+Other frequently accessed data.
+4. Authentication
+
+Auth0: Used for user authentication and authorization.
+JWT: JSON Web Tokens are used for verifying user identity.
+5. External API Integrations
+
+Polymarket: Used for fetching market data and orderbook information.
+Kalshi: Used for fetching market data, orderbook information, and user authentication.
+OpenAI: Used for generating text embeddings.
+Perplexity: Used for generating text responses.
+6. WebSocket Functionality
+
+Real-time Updates: Used for pushing real-time market data, orderbook updates, and chat messages to clients.
+Orderbook Streaming: Manages real-time orderbook updates for Polymarket and Kalshi.
+Chat Streaming: Handles streaming responses from the AI chat.
+7. API Endpoints
+
+Here's a breakdown of the main API endpoints and their functionalities:
+
+/api/register: Registers a new user.
+/api/submit-order: Submits a new order (market or limit).
+/api/orders/:orderId: Cancels an existing order.
+/api/invalidate-holdings: Invalidates the holdings cache for a user.
+/api/active-orders: Retrieves a user's active orders.
+/api/balance: Retrieves a user's balance.
+/api/value-history: Retrieves a user's value history.
+/api/analyze: Analyzes a market using external scripts.
+/api/reflect-date-said: Updates quote confirmations.
+/api/reddit: Performs Reddit analysis for a market.
+/api/facts: Fetches facts for a market.
+/api/analogize: Finds analogous events for a market.
+/api/latest_tweets: Analyzes latest tweets for a market.
+/api/fetch_kalshi_fields: Fetches Kalshi market fields.
+/api/chart: Generates a price chart for a market.
+/api/timeline: Performs timeline analysis for a market.
+/api/profile_names: Retrieves a list of profile names.
+/api/relevant_people: Retrieves relevant people for a given description.
+/api/news_results: Retrieves news results for a given description.
+/api/polymarket/orderbook/:marketId: Retrieves the Polymarket orderbook for a market.
+/api/price_history: Retrieves price history for a market.
+/api/relevant_events: Retrieves relevant events for a given context.
+/api/relevant_markets: Retrieves relevant markets for a given query.
+/api/search_quotes: Searches for quotes.
+/api/chat: Handles chat requests with market query processing and streaming.
+/api/profile: Routes for profile-related operations.
+/api/unique_tickers: Retrieves a list of unique tickers.
+/api/run-summary-script: Runs a summary script for a market.
+/api/run-getnewsfresh: Runs a script to fetch fresh news.
+/api/qa-trees: Retrieves a user's saved QA trees.
+/api/qa-tree/:treeId: Retrieves a specific QA tree.
+/api/save-qa-tree: Saves a QA tree.
+/api/delete-qa-tree/:treeId: Deletes a QA tree.
+/api/update-qa-tree-title/:treeId: Updates a QA tree title.
+/api/similar-markets/:marketId: Retrieves similar markets for a given market.
+/api/final-analysis/:marketId/:chainId: Retrieves the final analysis for a market and chain ID.
+/api/run-getkeyfigures: Runs a script to get key figures for a description.
+/api/related-markets/:marketId: Retrieves related markets for a given market.
+/api/prediction-trade-ideas: Generates prediction trade ideas.
+/api/summary-chain-ids/:marketId: Retrieves chain IDs for a market.
+/api/messages/:marketId/:chainId: Retrieves messages for a market and chain ID.
+/api/summary-messages/:marketId/:chainId: Retrieves summary messages for a market and chain ID.
+/api/top_movers: Retrieves top movers.
+8. Key Flows
+
+User Authentication:
+Users authenticate via Auth0.
+JWTs are used to verify user identity for protected endpoints.
+Market Data Retrieval:
+Data is fetched from PostgreSQL and cached in Redis.
+Real-time updates are pushed via WebSockets.
+Order Placement:
+Orders are submitted via the /api/submit-order endpoint.
+The OrderManager handles order execution and updates the database.
+WebSockets are used to notify clients of order updates.
+Market Analysis:
+Various analysis scripts (Python, JavaScript) are executed via API endpoints.
+Results are stored in the database and cached in Redis.
+Chat Functionality:
+Users send messages via the /api/chat endpoint.
+The backend processes the message using LLMs and returns a stream of responses.
+Market data is included in the chat response.
+QA Tree Management:
+Users can save, load, and delete QA trees via API endpoints.
+QA trees are stored in PostgreSQL.
+Real-time Data Streaming:
+WebSockets are used to stream real-time orderbook data from Polymarket and Kalshi.
+Clients subscribe to specific markets and sides.
+9. Functionality Breakdown
+
+User Management: User registration, authentication, and balance management.
+Market Data: Fetching and caching market data, including prices, volumes, and other details.
+Trading: Order placement, execution, and cancellation.
+Market Analysis: Various analysis tools, including Reddit, Twitter, and timeline analysis.
+AI Chat: An AI-powered chat interface for market insights.
+QA Tree: A system for creating and managing question-and-answer trees.
+Real-time Updates: Real-time market data and orderbook updates via WebSockets.
+External API Integration: Integration with Polymarket, Kalshi, OpenAI, and Perplexity.
+Caching: Extensive use of Redis for caching frequently accessed data.
+Security: Secure headers and Auth0 for authentication.
+Simplified Flow Diagram
+
+[Client] <--> [Express.js Server]
+    |             |
+    |             |--> [Auth0]
+    |             |
+    |             |--> [PostgreSQL (Neon)]
+    |             |
+    |             |--> [Redis (Upstash)]
+    |             |
+    |             |--> [OrderManager]
+    |             |
+    |             |--> [Polymarket API]
+    |             |
+    |             |--> [Kalshi API]
+    |             |
+    |             |--> [OpenAI API]
+    |             |
+    |             |--> [Perplexity API]
+    |             |
+    |             |--> [Python Scripts]
+    |             |
+    |             |--> [JavaScript Scripts]
+    |             |
+    | <--> [WebSocket Server]
+Key Technologies
+
+Node.js: Runtime environment for the server.
+Express.js: Web framework for building the API.
+PostgreSQL (Neon): Serverless database for persistent data storage.
+Redis (Upstash): Serverless cache for improving performance.
+Auth0: Authentication service.
+WebSockets: For real-time communication.
+Axios: HTTP client for external API requests.
+OpenAI API: For generating embeddings.
+Perplexity API: For generating text responses.
+Further Notes
+
+The code uses a combination of database queries, external API calls, and script executions.
+The code includes error handling and logging.
+The code uses caching to improve performance.
+The code uses WebSockets for real-time updates.
+The code is designed to be scalable and maintainable.
+
+
+
+DB TABLES:
+
+"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"ordinal_position"	"is_primary_key"	"is_unique"	"is_foreign_key"	"foreign_key_references"	"constraints"
+"active_orders"	"id"	"uuid"	"NO"	"gen_random_uuid()"	1	"YES"	"NO"	"NO"		"PRIMARY KEY"
+"active_orders"	"auth0_id"	"text"	"NO"		2	"NO"	"NO"	"YES"	"users.auth0_id"	"FOREIGN KEY"
+"active_orders"	"market_id"	"text"	"NO"		3	"NO"	"NO"	"NO"		
+"active_orders"	"token_id"	"text"	"NO"		4	"NO"	"NO"	"NO"		
+"active_orders"	"outcome"	"text"	"NO"		5	"NO"	"NO"	"NO"		
+"active_orders"	"side"	"text"	"NO"		6	"NO"	"NO"	"NO"		
+"active_orders"	"size"	"numeric"	"NO"		7	"NO"	"NO"	"NO"		
+"active_orders"	"limit_price"	"numeric"	"YES"		8	"NO"	"NO"	"NO"		
+"active_orders"	"order_type"	"text"	"NO"		9	"NO"	"NO"	"NO"		
+"active_orders"	"status"	"text"	"NO"	"'active'::text"	10	"NO"	"NO"	"NO"		
+"active_orders"	"created_at"	"timestamp with time zone"	"YES"	"CURRENT_TIMESTAMP"	11	"NO"	"NO"	"NO"		
+"api_keys"	"id"	"uuid"	"NO"	"gen_random_uuid()"	1	"YES"	"NO"	"NO"		"PRIMARY KEY"
+"api_keys"	"user_id"	"text"	"NO"		2	"NO"	"NO"	"YES"	"users.auth0_id, users.auth0_id"	"FOREIGN KEY, FOREIGN KEY"
+"api_keys"	"api_key"	"text"	"NO"		3	"NO"	"YES"	"NO"		"UNIQUE"
+"api_keys"	"api_secret"	"text"	"NO"		4	"NO"	"NO"	"NO"		
+"api_keys"	"is_active"	"boolean"	"YES"	"true"	5	"NO"	"NO"	"NO"		
+"api_keys"	"created_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"	6	"NO"	"NO"	"NO"		
+"api_keys"	"last_used_at"	"timestamp without time zone"	"YES"		7	"NO"	"NO"	"NO"		
+"events"	"id"	"text"	"NO"		1	"YES"	"NO"	"NO"		"PRIMARY KEY"
+"events"	"title"	"text"	"NO"		2	"NO"	"NO"	"NO"		
+"events"	"slug"	"text"	"YES"		3	"NO"	"NO"	"NO"		
+"events"	"category"	"text"	"YES"		4	"NO"	"NO"	"NO"		
+"events"	"sub_title"	"text"	"YES"		5	"NO"	"NO"	"NO"		
+"events"	"mutually_exclusive"	"boolean"	"YES"	"false"	6	"NO"	"NO"	"NO"		
+"events"	"created_at"	"timestamp with time zone"	"YES"	"CURRENT_TIMESTAMP"	7	"NO"	"NO"	"NO"		
+"events"	"updated_at"	"timestamp with time zone"	"YES"	"CURRENT_TIMESTAMP"	8	"NO"	"NO"	"NO"		
+"holdings"	"id"	"uuid"	"NO"	"gen_random_uuid()"	1	"YES"	"NO"	"NO"		"PRIMARY KEY"
+"holdings"	"user_id"	"text"	"NO"		2	"NO"	"NO"	"NO"		
+"holdings"	"market_id"	"text"	"NO"		3	"NO"	"NO"	"NO"		
+"holdings"	"position"	"text"	"NO"		4	"NO"	"NO"	"NO"		
+"holdings"	"amount"	"numeric"	"NO"		5	"NO"	"NO"	"NO"		
+"holdings"	"created_at"	"timestamp without time zone"	"NO"	"now()"	6	"NO"	"NO"	"NO"		
+"holdings"	"token_id"	"text"	"NO"		7	"NO"	"NO"	"NO"		
+"holdings"	"outcome"	"text"	"NO"		8	"NO"	"NO"	"NO"		
+"holdings"	"entry_price"	"numeric"	"YES"		9	"NO"	"NO"	"NO"		
+"market_prices"	"id"	"bigint"	"NO"	"nextval('market_prices_id_seq'::regclass)"	1	"YES"	"NO"	"NO"		"PRIMARY KEY"
+"market_prices"	"market_id"	"text"	"YES"		2	"NO"	"NO"	"YES"	"markets.id"	"FOREIGN KEY"
+"market_prices"	"timestamp"	"timestamp with time zone"	"YES"	"CURRENT_TIMESTAMP"	3	"NO"	"NO"	"NO"		
+"market_prices"	"yes_price"	"numeric"	"YES"		4	"NO"	"NO"	"NO"		
+"market_prices"	"no_price"	"numeric"	"YES"		5	"NO"	"NO"	"NO"		
+"market_prices"	"best_bid"	"numeric"	"YES"		6	"NO"	"NO"	"NO"		
+"market_prices"	"best_ask"	"numeric"	"YES"		7	"NO"	"NO"	"NO"		
+"market_prices"	"last_traded_price"	"numeric"	"YES"		8	"NO"	"NO"	"NO"		
+"market_prices"	"volume"	"numeric"	"YES"		9	"NO"	"NO"	"NO"		
+"market_prices"	"liquidity"	"numeric"	"YES"		10	"NO"	"NO"	"NO"		
+"markets"	"id"	"text"	"NO"		1	"YES"	"NO"	"NO"		"PRIMARY KEY"
+"markets"	"event_id"	"text"	"YES"		2	"NO"	"NO"	"YES"	"events.id"	"FOREIGN KEY"
+"markets"	"question"	"text"	"NO"		3	"NO"	"NO"	"NO"		
+"markets"	"subtitle"	"text"	"YES"		4	"NO"	"NO"	"NO"		
+"markets"	"url"	"text"	"YES"		5	"NO"	"NO"	"NO"		
+"markets"	"condid"	"text"	"YES"		6	"NO"	"NO"	"NO"		
+"markets"	"slug"	"text"	"YES"		7	"NO"	"NO"	"NO"		
+"markets"	"end_date"	"timestamp with time zone"	"YES"		8	"NO"	"NO"	"NO"		
+"markets"	"description"	"text"	"YES"		9	"NO"	"NO"	"NO"		
+"markets"	"outcomes"	"jsonb"	"YES"		10	"NO"	"NO"	"NO"		
+"markets"	"group_item_title"	"text"	"YES"		11	"NO"	"NO"	"NO"		
+"markets"	"open_time"	"timestamp with time zone"	"YES"		12	"NO"	"NO"	"NO"		
+"markets"	"close_time"	"timestamp with time zone"	"YES"		13	"NO"	"NO"	"NO"		
+"markets"	"status"	"text"	"YES"		14	"NO"	"NO"	"NO"		
+"markets"	"clobtokenids"	"jsonb"	"YES"		15	"NO"	"NO"	"NO"		
+"markets"	"active"	"boolean"	"YES"	"false"	16	"NO"	"NO"	"NO"		
+"markets"	"closed"	"boolean"	"YES"	"false"	17	"NO"	"NO"	"NO"		
+"markets"	"archived"	"boolean"	"YES"	"false"	18	"NO"	"NO"	"NO"		
+"markets"	"image"	"text"	"YES"		19	"NO"	"NO"	"NO"		
+"markets"	"yes_sub_title"	"text"	"YES"		20	"NO"	"NO"	"NO"		
+"markets"	"no_sub_title"	"text"	"YES"		21	"NO"	"NO"	"NO"		
+"markets"	"created_at"	"timestamp with time zone"	"YES"	"CURRENT_TIMESTAMP"	22	"NO"	"NO"	"NO"		
+"markets"	"updated_at"	"timestamp with time zone"	"YES"	"CURRENT_TIMESTAMP"	23	"NO"	"NO"	"NO"		
+"orders"	"id"	"uuid"	"NO"	"gen_random_uuid()"	1	"YES"	"NO"	"NO"		"PRIMARY KEY"
+"orders"	"user_id"	"text"	"NO"		2	"NO"	"NO"	"NO"		
+"orders"	"market_id"	"text"	"NO"		3	"NO"	"NO"	"NO"		
+"orders"	"status"	"text"	"NO"	"'active'::text"	4	"NO"	"NO"	"NO"		
+"orders"	"created_at"	"timestamp without time zone"	"NO"	"now()"	5	"NO"	"NO"	"NO"		
+"orders"	"token_id"	"text"	"YES"		6	"NO"	"NO"	"NO"		
+"orders"	"outcome"	"text"	"YES"		7	"NO"	"NO"	"NO"		
+"orders"	"side"	"text"	"YES"		8	"NO"	"NO"	"NO"		
+"orders"	"size"	"numeric"	"YES"		9	"NO"	"NO"	"NO"		
+"orders"	"price"	"numeric"	"YES"		10	"NO"	"NO"	"NO"		
+"orders"	"order_type"	"text"	"YES"		11	"NO"	"NO"	"NO"		
+"user_balances"	"user_id"	"uuid"	"NO"		1	"YES"	"NO"	"YES"	"users.id"	"PRIMARY KEY, FOREIGN KEY"
+"user_balances"	"balance"	"numeric"	"YES"	"1000.00"	2	"NO"	"NO"	"NO"		
+"user_balances"	"updated_at"	"timestamp with time zone"	"YES"	"CURRENT_TIMESTAMP"	3	"NO"	"NO"	"NO"		
+"user_value_history"	"id"	"uuid"	"NO"	"gen_random_uuid()"	1	"YES"	"NO"	"NO"		"PRIMARY KEY"
+"user_value_history"	"user_id"	"uuid"	"YES"		2	"NO"	"NO"	"YES"	"users.id"	"FOREIGN KEY"
+"user_value_history"	"total_value"	"numeric"	"NO"		3	"NO"	"NO"	"NO"		
+"user_value_history"	"timestamp"	"timestamp with time zone"	"YES"	"CURRENT_TIMESTAMP"	4	"NO"	"NO"	"NO"		
+"users"	"id"	"uuid"	"NO"	"gen_random_uuid()"	1	"YES"	"NO"	"NO"		"PRIMARY KEY"
+"users"	"created_at"	"timestamp with time zone"	"YES"	"CURRENT_TIMESTAMP"	4	"NO"	"NO"	"NO"		
+"users"	"balance"	"numeric"	"NO"	"0"	5	"NO"	"NO"	"NO"		
+"users"	"auth0_id"	"character varying"	"NO"		6	"NO"	"YES"	"NO"		"UNIQUE"
+"users"	"email"	"character varying"	"YES"		7	"NO"	"NO"	"NO"		
+"users"	"name"	"character varying"	"YES"		8	"NO"	"NO"	"NO"		
+"users"	"updated_at"	"timestamp with time zone"	"YES"	"now()"	9	"NO"	"NO"	"NO"		

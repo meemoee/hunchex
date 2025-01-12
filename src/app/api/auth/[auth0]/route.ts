@@ -1,4 +1,6 @@
-import { getSession } from '@auth0/nextjs-auth0';
+import { getSession } from '@auth0/nextjs-auth0/edge';
+
+export const runtime = 'edge';
 
 export async function GET() {
   try {
@@ -37,7 +39,7 @@ export async function GET() {
     const errorMessage = error instanceof Error 
       ? error.message 
       : String(error);
-      
+
     return new Response(JSON.stringify({
       error: 'Failed to retrieve access token',
       details: errorMessage

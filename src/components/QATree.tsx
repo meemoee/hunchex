@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useUser } from '@auth0/nextjs-auth0/client'
+import { HierarchyPointNode } from 'd3-hierarchy'; // Add this import if not already present
+import { TreeNodeDatum } from 'react-d3-tree'; // Add this import if not already present
 
 function formatMarkdown(content: string) {
   if (typeof content !== 'string') {
@@ -31,13 +33,13 @@ function formatMarkdown(content: string) {
   });
 
   // Wrap paragraphs, excluding headings, lists, and other HTML elements
-  content = content.replace(/(?<!<h[1-6]>|<ul>|<\/ul>|<ol>|<\/ol>|<li>|<\/li>)(?!<ol>|<\/ol>|<li>|<\/li>)(.*?)(?=\n\n|$)/gs, '<p>$1</p>');
+content = content.replace(/(<h[1-6]>.*?<\/h[1-6]>|<\/?[uo]l>|<\/?li>)/g, '###PRESERVE###$1###PRESERVE###');
 
-  // Remove empty paragraphs
-  content = content.replace(/<p>\s*<\/p>/g, '');
+	// Then wrap remaining content in <p> tags
+	content = content.replace(/([^#].*?)(\n\n|$)/g, '<p>$1</p>$2');
 
-  // Convert all remaining standalone newlines to <div> tags
-  content = content.replace(/(?<!\n)\n(?!\n)/g, '<div class="line-break"></div>');
+	// Finally restore preserved content
+	content = content.replace(/###PRESERVE###(.*?)###PRESERVE###/g, '$1');
 
   return content;
 }
@@ -89,7 +91,7 @@ interface TreeNode {
 }
 
 interface SavedQATree {
-  tree_id: string
+  id: string // Changed from tree_id to id
   title: string
   description: string
   created_at: string
@@ -228,20 +230,20 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
 		});
 		setSavedTrees(data);
 	  } catch (error) {
-		console.error('Error fetching QA trees:', {
-		  error: {
-			message: error.message,
-			stack: error.stack,
-			name: error.name
-		  },
-		  context: {
-			marketId,
-			userId: user?.sub,
-			timestamp: new Date().toISOString()
-		  }
-		});
-		toast.error('Failed to load QA trees');
-	  } finally {
+		  console.error('Error fetching QA trees:', {
+			error: {
+			  message: error instanceof Error ? error.message : 'Unknown error',
+			  stack: error instanceof Error ? error.stack : undefined,
+			  name: error instanceof Error ? error.name : typeof error
+			},
+			context: {
+			  marketId,
+			  userId: user?.sub,
+			  timestamp: new Date().toISOString()
+			}
+		  });
+		  toast.error('Failed to load QA trees');
+		} finally {
 		setIsLoading(false);
 		console.groupEnd();
 	  }
@@ -265,10 +267,26 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
 		}
 		
 		const treeData = await response.json();
-		console.log('Loaded tree data:', treeData);
+		console.log('Raw tree data:', JSON.stringify(treeData, null, 2));
 
-		// Directly set the tree data if it matches QANode structure
-		setQAData([treeData]);
+		// Validate the structure of the returned data
+		if (!treeData.hasOwnProperty('question') || !treeData.hasOwnProperty('answer')) {
+		  console.error('Invalid tree data structure:', treeData);
+		  toast.error('Invalid tree data format');
+		  return;
+		}
+
+		// Transform the data if needed and set state
+		const processedData = {
+		  question: treeData.question,
+		  answer: treeData.answer,
+		  children: treeData.children || [],
+		  id: treeData.id
+		};
+		
+		console.log('Processed tree data:', JSON.stringify(processedData, null, 2));
+		
+		setQAData([processedData]);
 		setSelectedSavedTree(treeId);
 		toast.success('Tree loaded successfully');
 	  } catch (error) {
@@ -374,11 +392,11 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
       await fetchSavedTrees();
       
     } catch (error) {
-      console.error('Error generating tree:', error);
-      toast.error(error.message || 'Failed to generate tree');
-    } finally {
-      setGenerationModal(prev => ({ ...prev, isGenerating: false }));
-    }
+	  console.error('Error generating tree:', error);
+	  toast.error(error instanceof Error ? error.message : 'Failed to generate tree');
+	} finally {
+	  setGenerationModal(prev => ({ ...prev, isGenerating: false }));
+	}
   };
 
   const updateTreeTitle = async () => {
@@ -417,16 +435,30 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
 
   // Prepare tree data for rendering
   const treeData = useMemo(() => transformData(qaData), [qaData, transformData])
-
-  interface NodeData {
-    data: TreeNode
-  }
+	const isTreeNode = (node: unknown): node is TreeNode => {
+	  return (
+		typeof node === 'object' &&
+		node !== null &&
+		'name' in node &&
+		'attributes' in node &&
+		typeof node.attributes === 'object' &&
+		node.attributes !== null &&
+		'answer' in node.attributes &&
+		typeof node.attributes.answer === 'string'
+	  );
+	};
 
   // Node click handler
-  const handleNodeClick = (nodeData: NodeData) => {
-    setSelectedNode(nodeData.data)
-    setEditingNode(null)
-  }
+// Update the handler to accept the correct type
+	const handleNodeClick = (node: HierarchyPointNode<TreeNodeDatum>) => {
+	  const nodeData = node.data;
+	  if (!isTreeNode(nodeData)) {
+		console.error('Invalid node data structure');
+		return;
+	  }
+	  setSelectedNode(nodeData);
+	  setEditingNode(null);
+	};
 
   // Edit node
   const startEditingNode = (node: TreeNode) => {
@@ -502,115 +534,116 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
       </div>
 
       {/* Tree Visualization */}
-      <div className="relative" style={{ height: '600px' }}>
-        <Tree
-          data={treeData[0]}
-          orientation="vertical"
-          translate={translate}
-          zoom={zoom}
-          onNodeClick={handleNodeClick}
-          rootNodeClassName="node__root"
-          branchNodeClassName="node__branch"
-          leafNodeClassName="node__leaf"
-          pathClassFunc={() => 'node__link rd3t-link'}
-          pathFunc={(linkData) => {
-            const { source, target } = linkData;
-            const midX = (source.x + target.x) / 2;
-            const midY = (source.y + target.y) / 2;
-            return `M${source.x},${source.y}
-                    L${midX},${midY}
-                    L${target.x},${target.y}`;
-          }}
-          renderCustomPathMarker={() => (
-            <marker
-              id="arrowhead"
-              viewBox="0 0 10 10"
-              refX="8"
-              refY="5"
-              markerWidth="6"
-              markerHeight="6"
-              orient="auto"
-            >
-              <path d="M 0 0 L 10 5 L 0 10 z" fill="white" />
-            </marker>
-          )}
-          separation={{ siblings: 2.5, nonSiblings: 3 }}
-          nodeSize={{ x: 500, y: 400 }}
-          zoomable={true}
-          scaleExtent={{ min: 0.1, max: 20 }}
-          renderCustomPathLabel={({ source, target }) => {
-            const midX = (source.x + target.x) / 2;
-            const midY = (source.y + target.y) / 2;
-            return (
-              <text
-                x={midX}
-                y={midY}
-                className="rd3t-link-text"
-                dy="-10"
-              >
-                leads to
-              </text>
-            );
-          }}
-          renderCustomNodeElement={({ nodeDatum }) => (
-            <g>
-              <foreignObject width={400} height={200} x={-200} y={-100} className="qa-tree-node">
-                <div className="bg-gray-800/90 rounded-lg shadow-lg border border-white/10 qa-tree-node-content">
-                  <div className="px-6 py-4">
-                    <div className="flex justify-between items-start gap-2 mb-2">
-                      <div 
-                        className="font-medium text-sm"
-                        dangerouslySetInnerHTML={{
-                          __html: formatMarkdown(nodeDatum.name)
-                        }}
-                      />
-                      <div className="flex space-x-1">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            startEditingNode(nodeDatum);
-                          }}
-                          className="p-1 hover:bg-white/10 rounded"
-                        >
-                          <Edit className="w-4 h-4 text-gray-400" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setNewRootNode(nodeDatum);
-                          }}
-                          className="p-1 hover:bg-white/10 rounded"
-                        >
-                          <GitBranch className="w-4 h-4 text-gray-400" />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="border-t-2 border-white/40 my-2" />
-                    <div 
-                      className="text-xs text-gray-400 whitespace-pre-wrap"
-                      dangerouslySetInnerHTML={{
-                        __html: formatMarkdown(nodeDatum.attributes?.answer)
-                      }}
-                    />
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setExpansionModal({
-                        parentNode: nodeDatum,
-                        focus: '',
-                        numLayers: 2,
-                        questionsPerLayer: 2
-                      });
-                    }}
-                    className="absolute bottom-2 right-2 w-6 h-6 hover:bg-white/10 rounded-full flex items-center justify-center bg-gray-800/90"
-                  >
-                    <span className="text-white text-lg leading-none">+</span>
-                  </button>
-                </div>
-              </foreignObject>
-            </g>
-          )}
+	<div className="relative" style={{ height: '600px' }}>
+	  <svg style={{ width: 0, height: 0, position: 'absolute' }}>
+		<defs>
+		  <marker
+			id="arrowhead"
+			viewBox="0 0 10 10"
+			refX="8"
+			refY="5"
+			markerWidth="6"
+			markerHeight="6"
+			orient="auto"
+		  >
+			<path d="M 0 0 L 10 5 L 0 10 z" fill="white" />
+		  </marker>
+		</defs>
+	  </svg>
+
+	  <Tree
+		data={treeData[0]}
+		orientation="vertical"
+		translate={translate}
+		zoom={zoom}
+		onNodeClick={handleNodeClick}
+		rootNodeClassName="node__root"
+		branchNodeClassName="node__branch"
+		leafNodeClassName="node__leaf"
+		pathClassFunc={() => 'node__link rd3t-link'}
+		pathFunc={(linkData) => {
+		  const { source, target } = linkData;
+		  const midX = (source.x + target.x) / 2;
+		  const midY = (source.y + target.y) / 2;
+		  return `M${source.x},${source.y}
+				  L${midX},${midY}
+				  L${target.x},${target.y}`;
+		}}
+		separation={{ siblings: 2.5, nonSiblings: 3 }}
+		nodeSize={{ x: 500, y: 400 }}
+		zoomable={true}
+		scaleExtent={{ min: 0.1, max: 20 }}
+		renderCustomNodeElement={({ nodeDatum }) => (
+		  <g>
+			<foreignObject width={400} height={200} x={-200} y={-100} className="qa-tree-node">
+			  <div className="bg-gray-800/90 rounded-lg shadow-lg border border-white/10 qa-tree-node-content">
+				<div className="px-6 py-4">
+				  <div className="flex justify-between items-start gap-2 mb-2">
+					<div 
+					  className="font-medium text-sm"
+					  dangerouslySetInnerHTML={{
+						__html: formatMarkdown(String(nodeDatum.name || ''))
+					  }}
+					/>
+					<div className="flex space-x-1">
+					  <button
+						onClick={(e) => {
+						  e.stopPropagation();
+						  if (isTreeNode(nodeDatum)) {
+							startEditingNode(nodeDatum);
+						  } else {
+							console.error('Invalid node data structure');
+						  }
+						}}
+						className="p-1 hover:bg-white/10 rounded"
+					  >
+						<Edit className="w-4 h-4 text-gray-400" />
+					  </button>
+					  <button
+						onClick={(e) => {
+						  e.stopPropagation();
+						  if (isTreeNode(nodeDatum)) {
+							setNewRootNode(nodeDatum);
+						  } else {
+							console.error('Invalid node data structure');
+						  }
+						}}
+						className="p-1 hover:bg-white/10 rounded"
+					  >
+						<GitBranch className="w-4 h-4 text-gray-400" />
+								</button>
+							  </div>
+							</div>
+							<div className="border-t-2 border-white/40 my-2" />
+							<div 
+							  className="text-xs text-gray-400 whitespace-pre-wrap"
+							  dangerouslySetInnerHTML={{
+								__html: formatMarkdown(String(nodeDatum.attributes?.answer || ''))
+							  }}
+							/>
+						  </div>
+						  <button
+							  onClick={(e) => {
+								e.stopPropagation();
+								if (isTreeNode(nodeDatum)) {
+								  setExpansionModal({
+									parentNode: nodeDatum,
+									focus: '',
+									numLayers: 2,
+									questionsPerLayer: 2
+								  });
+								} else {
+								  console.error('Invalid node data structure');
+								}
+							  }}
+							  className="absolute bottom-2 right-2 w-6 h-6 hover:bg-white/10 rounded-full flex items-center justify-center bg-gray-800/90"
+							>
+							  <span className="text-white text-lg leading-none">+</span>
+							</button>
+						</div>
+					  </foreignObject>
+					</g>
+				  )}
         />
         
         {/* Selected Node Details */}
@@ -629,12 +662,14 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
                 Edit Node
               </h3>
               <input
-                type="text"
-                defaultValue={editingNode.name}
-                placeholder="Question"
-                className="w-full p-2 mb-4 bg-gray-700 rounded"
-                ref={el => el && el.focus()}
-              />
+				  type="text"
+				  defaultValue={editingNode.name}
+				  placeholder="Question"
+				  className="w-full p-2 mb-4 bg-gray-700 rounded"
+				  ref={(el) => {
+					if (el) el.focus();
+				  }}
+				/>
               <div className="flex justify-end space-x-2">
                 <button
                   onClick={() => setEditingNode(null)}
@@ -683,17 +718,17 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
               <div className="space-y-2">
                 {savedTrees.map(tree => (
                   <div 
-                    key={tree.tree_id} 
+                    key={tree.id} 
                     className={`
                       p-3 rounded-lg cursor-pointer 
                       transition-colors duration-200
-                      ${selectedSavedTree === tree.tree_id 
+                      ${selectedSavedTree === tree.id 
                         ? 'bg-blue-500/20' 
                         : 'hover:bg-white/10'
                       } relative
                     `}
                   >
-                    {editingTreeTitle.treeId === tree.tree_id ? (
+                    {editingTreeTitle.treeId === tree.id ? (
                       <div className="flex items-center space-x-2">
                         <input
                           type="text"
@@ -720,8 +755,8 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
                     ) : (
                       <div 
                         onClick={() => {
-                          console.log('Loading tree with ID:', tree.tree_id);
-                          loadSavedTree(tree.tree_id);
+                          console.log('Loading tree with ID:', tree.id);
+                          loadSavedTree(tree.id);
                         }}
                         className="flex justify-between items-center"
                       >
@@ -738,7 +773,7 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
                             onClick={(e) => {
                               e.stopPropagation()
                               setEditingTreeTitle({
-                                treeId: tree.tree_id,
+                                treeId: tree.id,
                                 title: tree.title || ''
                               })
                             }}
@@ -749,7 +784,7 @@ const QATree: React.FC<QATreeProps> = ({ marketId, initialData }) => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
-                              deleteSavedTree(tree.tree_id)
+                              deleteSavedTree(tree.id)
                             }}
                             className="text-red-500 hover:bg-white/10 p-1 rounded"
                           >

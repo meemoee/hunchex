@@ -1,0 +1,62 @@
+
+.node__link {
+  stroke: white;
+  stroke-width: 2px;
+  fill: none;
+  marker-end: url(#arrowhead); /* Add this line */
+}
+
+.qa-tree-node {
+  width: 400px;
+  overflow: visible;
+  word-wrap: break-word;
+  height: 200px;
+}
+
+.qa-tree-node-content {
+  background: rgba(31, 41, 55, 0.9);
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  width: 100%;
+  min-height: 80px;
+  height: auto;
+  position: relative;
+  padding-bottom: 32px; /* Make room for the + button */
+}
+
+.qa-tree-node p {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+.highlight {
+  background-color: #ffd700;
+  color: #000000;
+  padding: 2px 4px;
+  border-radius: 2px;
+}
+
+.rd3t-label {
+  fill: white;
+  font-size: 12px;
+}
+
+.rd3t-link {
+  stroke: #ffffff !important;
+  marker-end: url('#arrowhead');
+}
+
+.rd3t-link-text {
+  fill: white;
+  font-size: 12px;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  filter: drop-shadow(0px 0px 2px rgba(0, 0, 0, 0.8));
+}
+
+.qa-tree-node-content {
+  position: relative;
+}

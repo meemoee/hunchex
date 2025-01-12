@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useWebSocket } from '@/lib/websocket'
+import { useWebSocket, WSUpdateData } from '@/lib/websocket'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Bell, Menu, ChevronLeft } from 'lucide-react'
@@ -29,18 +29,19 @@ type UserProfile = {
     image?: string
   }[]
   activeOrders: {
-    id: number
-    market_id: string
-    token_id: string
-    outcome: string
-    side: string
-    size: string
-    limit_price: number
-    order_type: string
-    status: string
-    created_at: string
-    question: string
-  }[]
+	  id: number
+	  market_id: string
+	  token_id: string
+	  outcome: string
+	  side: string
+	  size: string
+	  limit_price: number
+	  order_type: string
+	  status: string
+	  created_at: string
+	  question: string
+	  image?: string  // Add this line, make it optional with ?
+	}[]
 }
 
 const TIME_INTERVALS = [
@@ -147,12 +148,12 @@ export default function MoversListPage() {
 
       console.log('Holdings count:', data.length);
 
-      const formattedHoldings = data.map(holding => ({
-        ...holding,
-        amount: holding.amount?.toString() || '0',
-        entry_price: holding.entry_price?.toString() || '0',
-        current_price: holding.current_price?.toString() || '0'
-      }));
+      const formattedHoldings = data.map((holding: UserProfile['holdings'][0]) => ({
+		  ...holding,
+		  amount: holding.amount?.toString() || '0',
+		  entry_price: holding.entry_price?.toString() || '0',
+		  current_price: holding.current_price?.toString() || '0'
+		}));
 
       setHoldings(formattedHoldings);
       console.log('Holdings updated successfully');
@@ -223,39 +224,38 @@ export default function MoversListPage() {
       })
     }
 
-    subscribeToUpdates((type, data) => {
-      console.log('Debug (MoversListPage): Received WS event', type, data);
-      switch (type) {
-        case 'holdings_update':
-          console.log('Holdings update received, refreshing...');
-          fetchHoldings()
-          break
-        case 'balance_update':
-          if (data.balance !== undefined) {
-            console.log('Balance update received:', data.balance);
-            setBalance(data.balance)
-          }
-          break
-        case 'orders_update':
-          console.log('Orders update received, refreshing...');
-          fetchActiveOrders()
-          break
-        case 'price_update':
-          updateMoverData(data)
-          break
-        case 'order_execution':
-          console.log('Order execution update received:', data);
-          if (data.needsHoldingsRefresh) {
-            console.log('Immediate holdings refresh required');
-            Promise.all([
-              fetchHoldings(),
-              fetchBalance(),
-              fetchActiveOrders()
-            ]).catch(console.error);
-          }
-          break
-      }
-    })
+    subscribeToUpdates(<T extends keyof WSUpdateData>(type: T, data: WSUpdateData[T]) => {
+	  console.log('Debug (MoversListPage): Received WS event', type, data);
+	  switch (type) {
+		case 'holdings_update':
+		  console.log('Holdings update received, refreshing...');
+		  fetchHoldings()
+		  break
+		case 'balance_update':
+		  const balanceData = data as { balance: number };
+		  console.log('Balance update received:', balanceData.balance);
+		  setBalance(balanceData.balance)
+		  break
+		case 'orders_update':
+		  console.log('Orders update received, refreshing...');
+		  fetchActiveOrders()
+		  break
+		case 'price_update':
+		  updateMoverData(data as PriceUpdateData)
+		  break
+		case 'order_execution':
+		  console.log('Order execution update received:', data);
+		  if ('needsHoldingsRefresh' in data && data.needsHoldingsRefresh) {
+			console.log('Immediate holdings refresh required');
+			Promise.all([
+			  fetchHoldings(),
+			  fetchBalance(),
+			  fetchActiveOrders()
+			]).catch(console.error);
+		  }
+		  break
+	  }
+	})
   }, [socket, isConnected, subscribeToUpdates, fetchHoldings, fetchBalance, fetchActiveOrders])
   
 
@@ -292,17 +292,17 @@ export default function MoversListPage() {
 		console.log('Raw Response Data:', data);
 		
 		// Validate each mover has required fields
-		const processedMovers = data.map((mover, index) => {
+		const processedMovers = data.map((mover: Partial<TopMover>, index: number) => {
 		  if (!mover.market_id) {
 			console.error('Missing market_id for mover:', index, mover);
 		  }
 		  return {
 			...mover,
-			market_id: mover.market_id || mover.id, // Fallback to id if market_id missing
+			market_id: mover.market_id || '',
 			volume: mover.volume || 0,
 			volume_change: mover.volume_change || 0,
 			volume_change_percentage: mover.volume_change_percentage || 0,
-		  };
+		  } as TopMover;
 		});
 
 		console.log('Processed Movers:', processedMovers);

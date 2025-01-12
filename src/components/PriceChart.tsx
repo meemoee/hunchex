@@ -2,13 +2,14 @@ import { useMemo, useCallback } from 'react';
 import { ParentSize } from '@visx/responsive';
 import { scaleTime, scaleLinear } from '@visx/scale';
 import { LinePath, Area } from '@visx/shape';
-import { AxisLeft, AxisBottom } from '@visx/axis';
 import { useTooltip } from '@visx/tooltip';
+import type { NumberValue } from 'd3-scale';
 import { localPoint } from '@visx/event';
 import { LinearGradient } from '@visx/gradient';
 import { bisector } from 'd3-array';
 import { timeFormat } from 'd3-time-format';
 import { curveMonotoneX, curveLinear } from '@visx/curve';
+import { AxisLeft, AxisBottom } from '@visx/axis';
 
 interface PriceData {
   time: number;
@@ -228,7 +229,10 @@ function Chart({
             tickLength={0}
             hideTicks
             numTicks={6}
-            tickFormat={(value: Date) => formatDate(value)}
+            tickFormat={(value: NumberValue) => {
+			  const date = value instanceof Date ? value : new Date(+value);
+			  return formatDate(date);
+			}}
             tickLabelProps={() => ({
               fill: '#9ca3af',
               fontSize: 11,

@@ -317,7 +317,8 @@ async function generateSubQuestions(
   const prompt = `
 PARENT QUESTION CONTEXT:
 QUESTION: ${parentQuestion.question}
-ANSWER: ${parentQuestion.answer}
+
+**ANSWER: ${parentQuestion.answer}**
 
 MARKET DETAILS:
 Title: ${marketInfo.question}
@@ -325,10 +326,21 @@ Description: ${marketInfo.description}
 
 INSTRUCTION:
 EXTRACT ${nodesPerLayer} PRECISE SUB-QUESTIONS THAT:
-- DIRECTLY RELATE TO PARENT QUESTION
+- REPEAT ZERO INFO FROM THE PRIOR CONTEXT
+- *DO NOT* OVERLAP QUESTION CONTENT OR INTENT
+- *ONLY* EXAMINES NEW, NOVEL ASPECTS TO EXPLORE
+- STILL RELEVANT TO PARENT ANSWER
 - CAPTURE DISTINCT ANALYTICAL PERSPECTIVES
-- DO NOT OVERLAP IN QUESTION MATTER
-- EACH EXPLORE UNIQUE FACETS OF THE QUESTION TO PIECE TOGETHER THE PUZZLE`;
+- FIND CONSENSUS AND OPINIONS
+- RETRIEVES QUOTES PEOPLE HAVE SAID
+- COMPARE THIS MARKET EVENT TO SIMILAR PRIOR EVENTS
+- FIND SIMILAR PRIOR EVENTS WITH SIMILAR CONDITIONS
+- FIND WHAT MAKES THIS EVENT SIMILAR OR DIFFERENT FROM PRIOR ANALOGOUS EVENTS
+- IF THE PARENT CONTEXT OR ANSWER LISTS ANY ANALOGOUS EVENTS, DIVE DEEPER INTO SPECIFICALLY WHAT CAUSED THEM
+- HISTORICAL NUMBERS AND LIKELIHOODS
+- REPEAT ZERO INFO FROM THE PRIOR CONTEXT
+- *ONLY* EXAMINES NEW, NOVEL ASPECTS TO EXPLORE
+- EACH QUESTION EXPLORE UNIQUE FACETS OF THE QUESTION TO PIECE TOGETHER THE PUZZLE`;
 
   try {
     const response = await fetch(config.OPENROUTER_URL, {
@@ -480,9 +492,16 @@ export async function POST(request: Request) {
       });
     }
     logger.debug('Market info retrieved:', marketInfo);
+	
+	
+		// Create a new scoped constant
+	const validMarketInfo = marketInfo; // This will have type MarketInfo, not MarketInfo | null
+
+	// Then use validMarketInfo instead of marketInfo in subsequent code
+
 
     logger.debug('Generating root question...');
-    const root = await generateRootQuestion(marketInfo);
+	const root = await generateRootQuestion(validMarketInfo);
     if (!root) {
       logger.error('Failed to generate root question');
       return new Response(JSON.stringify({ error: 'Failed to generate root question' }), {
@@ -513,10 +532,10 @@ export async function POST(request: Request) {
       logger.debug('Generating sub-questions for:', node.question);
       
       const subQuestions = await generateSubQuestions(
-        { question: node.question, answer: node.answer },
-        marketInfo,
-        nodesPerLayer
-      );
+		  { question: node.question, answer: node.answer },
+		  validMarketInfo,  // Use validMarketInfo here
+		  nodesPerLayer
+		);
 
       if (subQuestions) {
         node.children = Array.isArray(subQuestions) ? subQuestions : [subQuestions];

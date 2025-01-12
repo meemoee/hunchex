@@ -1,15 +1,23 @@
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
+// Define allowed types for log data
+type LogData = 
+  | Record<string, unknown>
+  | Error 
+  | null 
+  | undefined;
+
 interface LogEntry {
   timestamp: string;
   level: LogLevel;
   message: string;
-  data?: any;
+  data?: LogData;
 }
 
 class AuthLogger {
-  private logToConsole(level: LogLevel, message: string, ...args: any[]) {
+  private logToConsole(level: LogLevel, message: string, ...args: LogData[]) {
     const timestamp = new Date().toISOString();
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const logEntry: LogEntry = {
       timestamp,
       level,
@@ -33,19 +41,19 @@ class AuthLogger {
     }
   }
 
-  debug(message: string, ...args: any[]) {
+  debug(message: string, ...args: LogData[]) {
     this.logToConsole('debug', message, ...args);
   }
 
-  info(message: string, ...args: any[]) {
+  info(message: string, ...args: LogData[]) {
     this.logToConsole('info', message, ...args);
   }
 
-  warn(message: string, ...args: any[]) {
+  warn(message: string, ...args: LogData[]) {
     this.logToConsole('warn', message, ...args);
   }
 
-  error(message: string, ...args: any[]) {
+  error(message: string, ...args: LogData[]) {
     this.logToConsole('error', message, ...args);
   }
 
