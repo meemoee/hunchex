@@ -135,7 +135,6 @@ const TopMoversList: React.FC<TopMoversListProps> = ({
   onRefreshUserData,
   balance
 }) => {
-  const [isLoading, setIsLoading] = useState(false)
   const [isTimeIntervalDropdownOpen, setIsTimeIntervalDropdownOpen] = useState(false)
   const [expandedMovers, setExpandedMovers] = useState<Record<string, boolean>>({})
   const [priceHistories, setPriceHistories] = useState<Record<string, PriceHistory[]>>({})
@@ -489,10 +488,8 @@ const TopMoversList: React.FC<TopMoversListProps> = ({
                       }`}
                       onClick={async (e) => {
                         e.stopPropagation()
-                        setIsLoading(true)
                         setIsTimeIntervalDropdownOpen(false)
                         await onIntervalChange(interval.value)
-                        setIsLoading(false)
                       }}
                     >
                       <span className={`font-medium ${selectedInterval === interval.value ? 'text-white' : ''}`}>
