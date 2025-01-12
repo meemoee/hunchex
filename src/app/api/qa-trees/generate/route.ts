@@ -514,7 +514,7 @@ export async function POST(request: Request) {
       headers: { 'Content-Type': 'application/json' }
     });
   } finally {
-    const elapsedTime = performance.now(startTime);
-    logger.info(`QA tree generation request completed in ${elapsedTime[0]}s ${elapsedTime[1]/1000000}ms`);
+    const elapsedTime = (performance.now() - startTime) / 1000;
+    logger.info(`QA tree generation request completed in ${elapsedTime.toFixed(2)}s`);
   }
 }
