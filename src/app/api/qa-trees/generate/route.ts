@@ -511,9 +511,8 @@ export async function POST(request: Request) {
       }
 
       logger.debug('Generating sub-questions for:', node.question);
-	  
-	  
-	 const subQuestions = await generateSubQuestions(
+      
+      const subQuestions = await generateSubQuestions(
         { question: node.question, answer: node.answer },
         marketInfo,
         nodesPerLayer
@@ -526,10 +525,10 @@ export async function POST(request: Request) {
         }
       }
     }
-	
-  // Add this line to actually call populateChildren
-  logger.debug('Starting tree population...');
-  await populateChildren(treeData, 0);  // <-- Add this line!
+
+    logger.debug('Starting tree population...');
+    await populateChildren(treeData, 0);
+
 
 
     logger.debug('Saving tree to database...');
