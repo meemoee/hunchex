@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import Image from 'next/image'
 import QATree from './QATree'
 import { Decimal } from 'decimal.js'
 import { ChevronDown, TrendingUp, TrendingDown, Loader2 } from 'lucide-react'
@@ -550,10 +551,12 @@ const TopMoversList: React.FC<TopMoversListProps> = ({
                     className="cursor-pointer flex items-center max-w-[75%] md:max-w-none"
                     onClick={() => toggleMoverDetails(mover.market_id)}
                   >
-                    <img
+                    <Image
                       src={mover.image}
                       alt=""
-                      className="w-12 h-12 rounded-lg object-cover flex-shrink-0 mr-4 mt-2"
+                      width={48}
+                      height={48}
+                      className="rounded-lg object-cover flex-shrink-0 mr-4 mt-2"
                     />
                     <div className="flex flex-col min-w-0 min-h-[48px] pt-3">
                       <h3 
@@ -740,9 +743,9 @@ const TopMoversList: React.FC<TopMoversListProps> = ({
                       }}
                     >
                       {mover.url.includes('polymarket') ? (
-                        <img src="/images/PolymarketLogo.png" alt="Polymarket" width="22" height="22" />
+                        <Image src="/images/PolymarketLogo.png" alt="Polymarket" width={22} height={22} />
                       ) : mover.url.includes('kalshi') ? (
-                        <img src="/images/KalshiLogo.png" alt="Kalshi" width="22" height="22" />
+                        <Image src="/images/KalshiLogo.png" alt="Kalshi" width={22} height={22} />
                       ) : (
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
