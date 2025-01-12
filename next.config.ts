@@ -19,16 +19,24 @@ const nextConfig = {
   webpack: (config: any): any => {
     config.resolve.fallback = { fs: false, net: false, tls: false };
     return config;
-},
+  },
   async rewrites() {
+    const apiBaseUrl = process.env.NODE_ENV === 'production'
+      ? process.env.API_BASE_URL
+      : 'http://localhost:3001';
+    
+    const balanceApiUrl = process.env.NODE_ENV === 'production'
+      ? process.env.BALANCE_API_URL || process.env.API_BASE_URL
+      : 'http://localhost:3000';
+
     return [
       {
         source: '/api/top_movers',
-        destination: 'http://localhost:3001/api/top_movers'
+        destination: `${apiBaseUrl}/api/top_movers`
       },
       {
         source: '/api/qa-trees',
-        destination: 'http://localhost:3001/api/qa-trees',
+        destination: `${apiBaseUrl}/api/qa-trees`,
         has: [
           {
             type: 'header',
@@ -38,7 +46,7 @@ const nextConfig = {
       },
       {
         source: '/api/qa-trees/generate',
-        destination: 'http://localhost:3001/api/qa-trees/generate',
+        destination: `${apiBaseUrl}/api/qa-trees/generate`,
         has: [
           {
             type: 'header',
@@ -48,7 +56,7 @@ const nextConfig = {
       },
       {
         source: '/api/qa-tree/:id',
-        destination: 'http://localhost:3001/api/qa-tree/:id',
+        destination: `${apiBaseUrl}/api/qa-tree/:id`,
         has: [
           {
             type: 'header',
@@ -58,11 +66,11 @@ const nextConfig = {
       },
       {
         source: '/api/chat',
-        destination: 'http://localhost:3001/api/chat'
+        destination: `${apiBaseUrl}/api/chat`
       },
       {
         source: '/api/balance',
-        destination: 'http://localhost:3000/api/balance'
+        destination: `${balanceApiUrl}/api/balance`
       }
     ];
   },
