@@ -1,8 +1,7 @@
-import { auth } from 'express-oauth2-jwt-bearer';
+import { getSession } from '@auth0/nextjs-auth0/edge';
 import { authLogger } from '../utils/authLogger';
 
-// Define types for our handler
-type AuthenticatedRequest = Request & {
+export type AuthenticatedRequest = Request & {
   user?: {
     sub: string;
     email: string;
@@ -13,88 +12,63 @@ type AuthenticatedRequest = Request & {
 
 type AuthHandler = (req: AuthenticatedRequest) => Promise<Response>;
 
-export const validateAuth0Token = auth({
-  audience: process.env.AUTH0_AUDIENCE,
-  issuerBaseURL: process.env.AUTH0_ISSUER_BASE_URL,
-  tokenSigningAlg: 'RS256'
-});
-
 export async function withAuth(handler: AuthHandler): Promise<(req: Request) => Promise<Response>> {
   return async (req: Request) => {
     const requestId = Math.random().toString(36).substring(7);
     authLogger.debug(`\n=== Auth Middleware START (${requestId}) ===`);
-    authLogger.debug('Request details:', {
-      id: requestId,
-      url: req.url,
-      method: req.method,
-      headers: Object.fromEntries(req.headers),
-      cookies: req.headers.get('cookie'),
-      ip: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown',
-      userAgent: req.headers.get('user-agent')
-    });
-    authLogger.debug('Environment configuration:', {
-      id: requestId,
-      NODE_ENV: process.env.NODE_ENV,
-      AUTH0_AUDIENCE: process.env.AUTH0_AUDIENCE,
-      AUTH0_ISSUER_BASE_URL: process.env.AUTH0_ISSUER_BASE_URL,
-      isProduction: process.env.NODE_ENV === 'production'
-    });
-
+    
     try {
-      authLogger.debug(`[${requestId}] Validating JWT token...`);
-      await validateAuth0Token(req);
+      // Log request details
+      authLogger.debug('Request details:', {
+        id: requestId,
+        url: req.url,
+        method: req.method,
+        headers: Object.fromEntries(req.headers),
+        cookies: req.headers.get('cookie'),
+        ip: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown',
+        userAgent: req.headers.get('user-agent')
+      });
+
+      // Get Auth0 session using Edge-compatible method
+      const session = await getSession();
       
-      // Extract user information from the JWT token
-      const authHeader = req.headers.get('authorization');
-      const token = authHeader?.replace('Bearer ', '');
-      
-      if (!token) {
-        throw new Error('No token provided');
+      if (!session?.user) {
+        throw new Error('No authenticated user found');
       }
 
-      // Decode the JWT to get user information
-      const [, payload] = token.split('.');
-      const decodedUser = JSON.parse(atob(payload));
-
-      // Add user to request and cast to AuthenticatedRequest
+      // Create authenticated request with user info
       const authenticatedReq = req as AuthenticatedRequest;
       authenticatedReq.user = {
-        sub: decodedUser.sub,
-        email: decodedUser.email,
-        permissions: decodedUser.permissions
+        sub: session.user.sub,
+        email: session.user.email as string,
+        permissions: session.user.permissions as string[]
       };
 
       authLogger.debug(`[${requestId}] Auth successful, proceeding with handler`, {
         user: {
-          sub: decodedUser.sub,
-          email: decodedUser.email,
-          permissions: decodedUser.permissions
+          sub: session.user.sub,
+          email: session.user.email,
+          permissions: session.user.permissions
         }
       });
 
       const result = await handler(authenticatedReq);
+      
       authLogger.debug(`[${requestId}] Handler completed successfully`, {
         status: result.status,
         headers: Object.fromEntries(result.headers)
       });
+      
       return result;
 
     } catch (err: unknown) {
-      // Type guard function for Error with optional code property
-      const isErrorWithCode = (error: unknown): error is Error & { code?: string } => {
-        return error instanceof Error;
-      };
-
-      const errorDetails = isErrorWithCode(err) ? {
+      const errorDetails = err instanceof Error ? {
         name: err.name,
         message: err.message,
-        stack: err.stack,
-        code: err.code
+        stack: err.stack
       } : {
         name: 'UnknownError',
-        message: 'An unknown error occurred',
-        stack: undefined,
-        code: undefined
+        message: 'An unknown error occurred'
       };
 
       authLogger.error(`[${requestId}] Auth middleware error:`, {
@@ -106,8 +80,11 @@ export async function withAuth(handler: AuthHandler): Promise<(req: Request) => 
           ip: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown'
         }
       });
-      
-      return new Response(JSON.stringify({ error: 'Authentication failed' }), {
+
+      return new Response(JSON.stringify({ 
+        error: 'Authentication failed',
+        message: errorDetails.message 
+      }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' }
       });
