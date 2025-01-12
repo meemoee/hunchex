@@ -38,6 +38,7 @@ export function useWebSocket() {
     console.log('WebSocket disabled - message not sent:', data);
   }, []);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const subscribeToUpdates = useCallback((handler: UpdateHandler) => {
     console.log('WebSocket disabled - updates not available');
     // Return empty cleanup function to maintain API compatibility

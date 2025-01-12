@@ -21,12 +21,13 @@ const nextConfig = {
     return config;
   },
   async rewrites() {
+    // Default to self-hosted API endpoints in production if no API_BASE_URL is set
     const apiBaseUrl = process.env.NODE_ENV === 'production'
-      ? process.env.API_BASE_URL
+      ? (process.env.API_BASE_URL || 'https://hunchex.vercel.app')
       : 'http://localhost:3001';
     
     const balanceApiUrl = process.env.NODE_ENV === 'production'
-      ? process.env.BALANCE_API_URL || process.env.API_BASE_URL
+      ? (process.env.BALANCE_API_URL || process.env.API_BASE_URL || 'https://hunchex.vercel.app')
       : 'http://localhost:3000';
 
     return [
