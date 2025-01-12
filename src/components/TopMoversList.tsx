@@ -422,7 +422,7 @@ const TopMoversList: React.FC<TopMoversListProps> = ({
         if (preloadedData[marketId]) {
           setPriceHistories(prev => ({ ...prev, [marketId]: preloadedData[marketId] }))
           setPreloadedData(prev => {
-            const { [marketId]: removed, ...rest } = prev
+            const { [marketId]: _removed, ...rest } = prev
             return rest
           })
         } else if (!priceHistories[marketId]) {
