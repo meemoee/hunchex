@@ -6,6 +6,15 @@ import PriceChart from './PriceChart'
 import { OrderConfirmation } from './OrderConfirmation'
 import { formatPrice, formatVolumeChange } from '@/lib/utils'
 
+interface PriceHistoryItem {
+  t: string;
+  y: number;
+}
+
+interface TickerData extends TopMover {
+  price_change_percent: number;
+}
+
 interface TopMover {
   market_id: string
   question: string
@@ -93,8 +102,8 @@ async function fetchPriceHistory(marketId: string, interval: string = '1d'): Pro
   const data = await response.json()
   
   return data
-    .filter((item: any) => item.t && item.y)
-    .map((item: any) => ({
+    .filter((item: PriceHistoryItem) => item.t && item.y)
+    .map((item: PriceHistoryItem) => ({
       time: Math.floor(new Date(item.t).getTime() / 1000),
       price: item.y * 100
     }))
@@ -346,7 +355,7 @@ const TopMoversList: React.FC<TopMoversListProps> = ({
 
       const data = await response.json()
       
-      const processedTickers = data.tickers.map((ticker: any) => ({
+      const processedTickers = data.tickers.map((ticker: TickerData) => ({
         ...ticker,
         price_change_percent: parseFloat(ticker.price_change_percent),
         volume: ticker.volume || 0,
