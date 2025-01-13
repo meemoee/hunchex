@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/dist/server/web/spec-extension/response';
 import type { NextRequest } from 'next/dist/server/web/spec-extension/request';
-import { getSession } from '@auth0/nextjs-auth0/edge';
+import { withMiddlewareAuthRequired, getSession } from '@auth0/nextjs-auth0/edge';
 
-// Define types for our debug info structure
+// Keep your existing interfaces
 interface SessionAttemptInfo {
   exists: boolean;
   hasUser: boolean;
@@ -56,7 +56,7 @@ export const config = {
   ],
 };
 
-export default async function middleware(req: NextRequest) {
+async function middleware(req: NextRequest) {
   const debugInfo: DebugInfo = {
     timestamp: new Date().toISOString(),
     request: {
@@ -171,3 +171,6 @@ export default async function middleware(req: NextRequest) {
     );
   }
 }
+
+// Wrap the middleware with Auth0's middleware
+export default withMiddlewareAuthRequired(middleware);
