@@ -2,7 +2,7 @@ import { NextResponse } from 'next/dist/server/web/spec-extension/response';
 
 export const runtime = 'edge';
 
-function parseAuthCookie(cookieString: string | null): { code_verifier?: string } {
+function parseAuthCookie(cookieString: string | null): { code_verifier?: string, state?: string } {
   if (!cookieString) return {};
   const authCookie = cookieString.split(';').find(c => c.trim().startsWith('auth_verification='));
   if (!authCookie) return {};
@@ -19,29 +19,55 @@ function parseAuthCookie(cookieString: string | null): { code_verifier?: string 
 
 export async function GET(request: Request) {
   try {
+    const url = new URL(request.url);
     const headersList = Object.fromEntries(request.headers);
     const cookieData = parseAuthCookie(request.headers.get('cookie'));
+    const code = url.searchParams.get('code');
+    const state = url.searchParams.get('state');
     
+    // Debug info before token exchange
+    const preflightDebug = {
+      code_details: {
+        code: code?.substring(0, 10) + '...',
+        code_length: code?.length,
+        state: state,
+        cookie_state: cookieData.state,
+        states_match: state === cookieData.state
+      },
+      verifier_details: {
+        code_verifier: cookieData.code_verifier?.substring(0, 10) + '...',
+        verifier_length: cookieData.code_verifier?.length
+      }
+    };
+
     if (!cookieData.code_verifier) {
       return NextResponse.json({
         error: 'No code_verifier found in auth cookie',
-        cookie_data: cookieData
+        debug: preflightDebug
       }, { status: 400 });
     }
+
+    if (!code) {
+      return NextResponse.json({
+        error: 'No code found in URL',
+        debug: preflightDebug
+      }, { status: 400 });
+    }
+
+    const params = new URLSearchParams();
+    params.set('grant_type', 'authorization_code');
+    params.set('client_id', process.env.AUTH0_CLIENT_ID!);
+    params.set('client_secret', process.env.AUTH0_CLIENT_SECRET!);
+    params.set('code', code);
+    params.set('code_verifier', cookieData.code_verifier);
+    params.set('redirect_uri', `${process.env.AUTH0_BASE_URL}/api/auth/callback`);
 
     const tokenRequest = await fetch(`${process.env.AUTH0_ISSUER_BASE_URL}/oauth/token`, {
       method: 'POST',
       headers: {
         'content-type': 'application/x-www-form-urlencoded',
       },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        client_id: process.env.AUTH0_CLIENT_ID!,
-        client_secret: process.env.AUTH0_CLIENT_SECRET!,
-        code: new URL(request.url).searchParams.get('code') || '',
-        code_verifier: cookieData.code_verifier,
-        redirect_uri: `${process.env.AUTH0_BASE_URL}/api/auth/callback`
-      })
+      body: params
     });
 
     const tokenResponse = await tokenRequest.json();
@@ -49,8 +75,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       flowCheck: {
         phase: 'token_exchange',
-        code_present: !!new URL(request.url).searchParams.get('code'),
-        code_verifier_present: !!cookieData.code_verifier,
+        debug: preflightDebug,
         response: tokenResponse,
         headers: headersList,
         config: {
