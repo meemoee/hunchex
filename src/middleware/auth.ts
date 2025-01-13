@@ -30,7 +30,7 @@ export async function withAuth(handler: AuthHandler): Promise<(req: Request) => 
       });
 
       // Get Auth0 session using Edge-compatible method
-      const session = await getSession();
+      const session = await getSession();  // Remove req parameter for edge runtime
       
       if (!session?.user) {
         throw new Error('No authenticated user found');

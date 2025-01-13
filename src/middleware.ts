@@ -14,7 +14,7 @@ export default async function middleware(req: NextRequest) {
   }
 
   try {
-    const session = await getSession();
+    const session = await getSession();  // Remove req parameter for edge runtime
     if (!session?.user) {
       return new NextResponse(
         JSON.stringify({ error: 'Not authenticated' }), 
