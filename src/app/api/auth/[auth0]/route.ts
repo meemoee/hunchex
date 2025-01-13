@@ -7,46 +7,43 @@ export const runtime = 'edge';
 export const GET = handleAuth({
   callback: handleCallback({
     async afterCallback(req: Request, session: Session) {
-      console.log('Starting afterCallback...', {
-        url: req.url,
-        hasSession: !!session,
-        headers: Object.fromEntries(req.headers),
-        cookies: req.headers.get('cookie')
-      });
-
-      if (!session) {
-        console.error('No session created in afterCallback');
-        throw new Error('Failed to create session');
-      }
-
-      console.log('Auth callback completed', {
+      // Create debug info
+      const debugInfo = {
+        stage: 'afterCallback',
         sessionExists: !!session,
         hasUser: !!session?.user,
         userId: session?.user?.sub,
-        tokenExpiry: session?.accessTokenExpiresAt,
-        env: {
-          baseUrl: process.env.AUTH0_BASE_URL,
-          issuerUrl: process.env.AUTH0_ISSUER_BASE_URL
-        }
-      });
+        timestamp: new Date().toISOString()
+      };
 
+      // Create response with debug info
+      const response = NextResponse.json(session);
+      
+      // Add debug headers
+      response.headers.set('x-auth-debug', JSON.stringify(debugInfo));
+      response.headers.set('x-auth-stage', 'callback-complete');
+      
       return session;
     }
   }),
   onError(req: Request, error: Error) {
-    console.error('Auth error:', {
+    const debugInfo = {
       error: error.message,
       stack: error.stack,
-      url: req.url,
-      headers: Object.fromEntries(req.headers)
-    });
+      timestamp: new Date().toISOString()
+    };
 
-    return NextResponse.json({ 
+    const response = NextResponse.json({ 
       error: 'Authentication error',
       message: error.message,
-      timestamp: new Date().toISOString()
+      debug: debugInfo
     }, { 
       status: 401 
     });
+
+    response.headers.set('x-auth-debug', JSON.stringify(debugInfo));
+    response.headers.set('x-auth-stage', 'error-handler');
+
+    return response;
   }
 });
