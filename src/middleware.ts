@@ -31,36 +31,42 @@ async function middleware(req: Request) {
     debugInfo.hasSession = !!session;
     debugInfo.hasUser = !!session?.user;
 
+    // If no session, redirect to login instead of returning 401
     if (!session?.user) {
-      const response = NextResponse.json({
-        error: 'Not authenticated',
-        debug: debugInfo
-      }, {
-        status: 401
-      });
-
+      debugInfo.stage = 'middleware-redirect-to-login';
+      
+      // Create the login URL with a return path
+      const returnTo = encodeURIComponent(req.url);
+      const loginUrl = `/api/auth/login?returnTo=${returnTo}`;
+      
+      const response = NextResponse.redirect(new URL(loginUrl, req.url));
       response.headers.set('x-auth-debug', JSON.stringify(debugInfo));
       return response;
     }
 
+    // Add debug info to successful requests
     const next = NextResponse.next();
     next.headers.set('x-auth-debug', JSON.stringify(debugInfo));
+    
+    // Add user info to headers for downstream use if needed
+    if (session.user.sub) {
+      next.headers.set('x-auth-user-id', session.user.sub);
+    }
+    
     return next;
 
   } catch (error) {
     debugInfo.stage = 'middleware-error';
     debugInfo.error = error instanceof Error ? error.message : String(error);
 
-    const response = NextResponse.json({
-      error: 'Middleware error',
-      debug: debugInfo
-    }, {
-      status: 500
-    });
-
+    // For errors, redirect to login instead of returning error response
+    const loginUrl = `/api/auth/login`;
+    const response = NextResponse.redirect(new URL(loginUrl, req.url));
     response.headers.set('x-auth-debug', JSON.stringify(debugInfo));
+    
     return response;
   }
 }
 
+// Export the middleware with auth required wrapper
 export default withMiddlewareAuthRequired(middleware);
