@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { useWebSocket, WSUpdateData } from '@/lib/websocket'
 import Link from 'next/link'
 import Image from 'next/image'
-import '@/styles/gradientAnimation.css'
 import { Bell, Menu, ChevronLeft } from 'lucide-react'
 import { type TopMover } from '@/types/mover'
 import dynamic from 'next/dynamic'
@@ -336,9 +335,24 @@ export default function MoversListPage() {
 
   return (
     <div className="min-h-screen relative z-[1] bg-[#1a1b1e] isolation-isolate">
-      <div 
-        className="fixed inset-0 -z-10 pointer-events-none will-change-transform backface-hidden perspective-1000 animated-gradient-bg"
+      <div className="fixed inset-0 -z-10 pointer-events-none will-change-transform backface-hidden perspective-1000" 
         style={{
+          background: `
+            radial-gradient(circle at top left,
+              rgba(147, 51, 234, 0.03) 0%,
+              rgba(113, 60, 232, 0.03) 25%,
+              rgba(79, 70, 229, 0.03) 50%,
+              rgba(197, 71, 172, 0.03) 75%,
+              rgba(236, 72, 153, 0.03) 100%
+            ),
+            radial-gradient(circle at bottom right,
+              rgba(236, 72, 153, 0.02) 0%,
+              rgba(197, 71, 172, 0.02) 25%,
+              rgba(79, 70, 229, 0.02) 50%,
+              rgba(113, 60, 232, 0.02) 75%,
+              rgba(147, 51, 234, 0.02) 100%
+            )
+          `,
           transform: 'translateZ(0)',
           WebkitTransform: 'translateZ(0)',
           WebkitBackfaceVisibility: 'hidden',

@@ -1,49 +1,30 @@
-import { handleAuth, handleCallback } from '@auth0/nextjs-auth0/edge';
-import { NextResponse } from 'next/dist/server/web/spec-extension/response';
-import { Session } from '@auth0/nextjs-auth0';
+import { handleAuth } from '@auth0/nextjs-auth0/edge';
 
 export const runtime = 'edge';
 
-export const GET = handleAuth({
-  callback: handleCallback({
-    async afterCallback(req: Request, session: Session) {
-      // Create debug info
-      const debugInfo = {
-        stage: 'afterCallback',
-        sessionExists: !!session,
-        hasUser: !!session?.user,
-        userId: session?.user?.sub,
-        timestamp: new Date().toISOString()
-      };
+const authHandler = handleAuth();
 
-      // Create response with debug info
-      const response = NextResponse.json(session);
-      
-      // Add debug headers
-      response.headers.set('x-auth-debug', JSON.stringify(debugInfo));
-      response.headers.set('x-auth-stage', 'callback-complete');
-      
-      return session;
-    }
-  }),
-  onError(req: Request, error: Error) {
-    const debugInfo = {
-      error: error.message,
-      stack: error.stack,
-      timestamp: new Date().toISOString()
+export async function GET(request: Request) {
+  try {
+    // Get the auth path from the URL instead of params
+    const url = new URL(request.url);
+    const authPath = url.pathname.split('/').pop() || '';
+    
+    // Create a context object with the auth path
+    const ctx = {
+      params: { auth0: authPath }
     };
-
-    const response = NextResponse.json({ 
-      error: 'Authentication error',
-      message: error.message,
-      debug: debugInfo
-    }, { 
-      status: 401 
-    });
-
-    response.headers.set('x-auth-debug', JSON.stringify(debugInfo));
-    response.headers.set('x-auth-stage', 'error-handler');
-
+    
+    const response = await authHandler(request, ctx);
     return response;
+  } catch (error) {
+    console.error('Auth error:', error);
+    return new Response(
+      JSON.stringify({ error: 'Authentication failed' }), 
+      { 
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
   }
-});
+}
