@@ -12,14 +12,16 @@ const QUERY_TIMEOUT = 60000;
 const sql = neon(process.env.DATABASE_URL);
 
 // Initialize Redis
-const redis = new Redis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: process.env.REDIS_PORT || 6379,
-  maxRetriesPerRequest: 3,
-  commandTimeout: 60000,
-  connectTimeout: 60000,
-  retryStrategy: (times) => Math.min(times * 100, 3000)
-});
+const redis = process.env.REDIS_URL
+  ? new Redis(process.env.REDIS_URL)
+  : new Redis({
+      host: 'localhost',
+      port: 6379,
+      maxRetriesPerRequest: 3,
+      commandTimeout: 60000,
+      connectTimeout: 60000,
+      retryStrategy: (times) => Math.min(times * 100, 3000)
+    });
 
 async function getActiveMarkets(timeRange) {
   const { pastDate, now } = timeRange;
