@@ -223,12 +223,45 @@ async function calculatePriceChanges(interval) {
     console.log(`\nStoring ${allProcessedData.length} processed markets in Redis...`);
     
     try {
-      await redis.pipeline()
-        .setex(key, 10000, JSON.stringify(allProcessedData))
-        .set(`topMovers:${interval}:latest`, timestamp)
-        .exec();
+      // Convert data to string and split into ~800KB chunks
+      const dataString = JSON.stringify(allProcessedData);
+      const chunkSize = 800 * 1024; // 800KB in bytes
+      const chunks = [];
       
-      console.log(`Successfully stored data in Redis for ${interval} minute interval`);
+      for (let i = 0; i < dataString.length; i += chunkSize) {
+        chunks.push(dataString.slice(i, i + chunkSize));
+      }
+
+      console.log(`Splitting data into ${chunks.length} chunks...`);
+
+      // Store chunks and manifest
+      const pipeline = redis.pipeline();
+      
+      // Store each chunk
+      chunks.forEach((chunk, index) => {
+        pipeline.setex(
+          `${key}:chunk:${index}`,
+          10000,
+          chunk
+        );
+      });
+
+      // Store manifest
+      pipeline.setex(
+        `${key}:manifest`,
+        10000,
+        JSON.stringify({
+          chunks: chunks.length,
+          totalLength: dataString.length
+        })
+      );
+
+      // Update latest timestamp
+      pipeline.set(`topMovers:${interval}:latest`, timestamp);
+
+      await pipeline.exec();
+      
+      console.log(`Successfully stored ${chunks.length} chunks in Redis for ${interval} minute interval`);
       
       // Log summary statistics
       const activePriceChanges = allProcessedData.filter(m => m.price_change !== 0);
