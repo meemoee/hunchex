@@ -223,36 +223,36 @@ async function calculatePriceChanges(interval) {
     console.log(`\nStoring ${allProcessedData.length} processed markets in Redis...`);
     
     try {
-      // Convert data to string and split into ~800KB chunks
-      const dataString = JSON.stringify(allProcessedData);
-      const chunkSize = 800 * 1024; // 800KB in bytes
-      const chunks = [];
+      // Split array into chunks of markets
+      const marketChunks = [];
+      const marketsPerChunk = 500;
       
-      for (let i = 0; i < dataString.length; i += chunkSize) {
-        chunks.push(dataString.slice(i, i + chunkSize));
+      for (let i = 0; i < allProcessedData.length; i += marketsPerChunk) {
+        marketChunks.push(allProcessedData.slice(i, i + marketsPerChunk));
       }
 
-      console.log(`Splitting data into ${chunks.length} chunks...`);
+      console.log(`Splitting data into ${marketChunks.length} chunks (${marketsPerChunk} markets per chunk)...`);
 
       // Store chunks and manifest
       const pipeline = redis.pipeline();
       
-      // Store each chunk
-      chunks.forEach((chunk, index) => {
+      // Store each chunk as valid JSON
+      marketChunks.forEach((chunk, index) => {
         pipeline.setex(
           `${key}:chunk:${index}`,
           10000,
-          chunk
+          JSON.stringify(chunk)
         );
       });
 
-      // Store manifest
+      // Store manifest with array metadata
       pipeline.setex(
         `${key}:manifest`,
         10000,
         JSON.stringify({
-          chunks: chunks.length,
-          totalLength: dataString.length
+          chunks: marketChunks.length,
+          marketsPerChunk,
+          totalMarkets: allProcessedData.length
         })
       );
 
