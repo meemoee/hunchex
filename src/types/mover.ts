@@ -14,4 +14,7 @@ export interface TopMover {
   description?: string;
   outcomes?: string[] | string;
   clobtokenids?: string[];
+  active?: boolean;  // Added as optional
+  closed?: boolean;  // Added as optional
+  archived?: boolean;  // Added as optional
 }
