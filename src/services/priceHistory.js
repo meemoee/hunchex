@@ -1,5 +1,10 @@
 const axios = require('axios');
 
+// Kalshi auth state
+let kalshiTokens = {
+  elections: { token: null, userId: null, timestamp: null }
+};
+
 // Constants
 const POLY_API_URL = 'https://clob.polymarket.com';
 const KALSHI_API_BASE_URL = process.env.KALSHI_API_BASE_URL || 'https://api.elections.kalshi.com/trade-api/v2';
