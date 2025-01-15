@@ -157,7 +157,7 @@ class IndividualQuestions {
   }
 }
 
-const POLY_API_URL = 'https://clob.polymarket.com';
+const { intervalMap, fetchPriceHistory } = require('./src/services/priceHistory');
 const KALSHI_API_BASE_URL = 'https://api.elections.kalshi.com/trade-api/v2';
 const KALSHI_API_FALLBACK_URL = 'https://trading-api.kalshi.com/trade-api/v2';
 const KALSHI_EMAIL = 'tem-tam@hotmail.com';
