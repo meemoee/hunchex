@@ -80,17 +80,17 @@ const getVolumeColor = (percentage: number): string => {
 }
 
 async function fetchPriceHistory(marketId: string, interval: string = '1d'): Promise<PriceHistory[]> {
-  const response = await fetch(`http://localhost:3001/api/price_history?marketId=${marketId}&interval=${interval}`)
+  const response = await fetch(`/api/price-history?marketId=${marketId}&interval=${interval}`)
   if (!response.ok) {
     throw new Error('Failed to fetch price history')
   }
   const data = await response.json()
   
   return data
-    .filter((item: PriceHistoryItem) => item.t && item.y)
-    .map((item: PriceHistoryItem) => ({
-      time: Math.floor(new Date(item.t).getTime() / 1000),
-      price: item.y * 100
+    .filter((item: {t: string, y: number}) => item.t && item.y !== undefined)
+    .map((item: {t: string, y: number}) => ({
+      time: Math.floor(new Date(item.t).getTime() / 1000),  // Convert ISO string to Unix timestamp
+      price: item.y * 100  // Convert decimal to percentage
     }))
     .sort((a: PriceHistory, b: PriceHistory) => a.time - b.time)
 }
