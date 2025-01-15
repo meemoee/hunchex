@@ -1320,130 +1320,27 @@ app.get('/api/polymarket/orderbook/:marketId', async (req, res) => {
 });
 
 app.get('/api/price_history', async (req, res) => {
-  const { marketId } = req.query;
+  const { marketId, interval = '1m' } = req.query;
   if (!marketId) {
     return res.status(400).json({ error: 'Market ID is required' });
   }
 
-  // Extract series ticker and condition ID for Kalshi markets
-  const seriesTicker = marketId.split('-')[0];
-  const conditionId = marketId;
-
   try {
-    const result = await sql`SELECT clobtokenids, condid, event_id FROM markets WHERE id = ${marketId}`;
-    
-    // Explicitly ensure we have a rows property with length
-    const queryResult = { 
-      rows: result || [],  // Fallback to empty array if result is undefined
-      rowCount: result ? result.length : 0
-    };
-
-    if (queryResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Market not found' });
-    }
-
-    const { clobtokenids, condid, event_id } = queryResult.rows[0];
-
-    const endTs = Math.floor(Date.now() / 1000);
-    let startTs;
-    let periodInterval;
-
-    const intervalMap = {
-      '1d': { duration: 24 * 60 * 60, periodInterval: 1 },
-      '1w': { duration: 7 * 24 * 60 * 60, periodInterval: 60 },
-      '1m': { duration: 30 * 24 * 60 * 60, periodInterval: 60 },
-      '3m': { duration: 90 * 24 * 60 * 60, periodInterval: 60 },
-      '1y': { duration: 365 * 24 * 60 * 60, periodInterval: 1440 },
-      '5y': { duration: 5 * 365 * 24 * 60 * 60, periodInterval: 1440 }
-    };
-
-    const interval = intervalMap[req.query.interval] || intervalMap['1m'];
-    startTs = endTs - interval.duration;
-    periodInterval = interval.periodInterval;
-
-    console.log(`Fetching price history for interval: ${req.query.interval}, startTs: ${startTs}, endTs: ${endTs}, periodInterval: ${periodInterval}`);
-
-    let formattedData;
-
-    // Check if it's a Kalshi market by looking at the marketId format
-    const isKalshiMarket = marketId.includes('-') && !marketId.startsWith('0x');
-
-    // Extract series ticker from market ID
-    const seriesTicker = marketId.split('-')[0];
-    
-    if (marketId.includes('-')) {
-      // This is a Kalshi market
-      try {
-        const candlesticks = await getKalshiMarketCandlesticks(seriesTicker, marketId, startTs, endTs, periodInterval);
-
-        if (!candlesticks || !candlesticks.candlesticks || !Array.isArray(candlesticks.candlesticks)) {
-          return res.status(500).json({ error: 'Invalid response from Kalshi API' });
-        }
-
-        formattedData = candlesticks.candlesticks.map(candle => ({
-          t: new Date(candle.end_period_ts * 1000).toISOString(),
-          y: parseFloat(candle.yes_ask.close) / 100 // Convert cents to dollars and to a value between 0 and 1
-        }));
-      } catch (error) {
-        console.error('Error fetching Kalshi data:', error.response ? error.response.data : error.message);
-        return res.status(500).json({ error: 'Error fetching Kalshi data', details: error.response ? error.response.data : error.message });
-      }
-    } else if (clobtokenids) {
-      // Polymarket
-      const clobTokenIds = JSON.parse(clobtokenids);
-      if (clobTokenIds.length === 0) {
-        return res.status(404).json({ error: 'No clobTokenIds found for this market' });
-      }
-
-      const firstClobTokenId = clobTokenIds[0];
-
-      const response = await axios.get(`${POLY_API_URL}/prices-history`, {
-        params: {
-          market: firstClobTokenId,
-          startTs: startTs,
-          endTs: endTs,
-          fidelity: periodInterval
-        },
-        headers: {
-          'Authorization': 'Bearer 0x4929c395a0fd63d0eeb6f851e160642bb01975a808bf6119b07e52f3eca4ee69'
-        }
-      });
-
-      if (!response.data || !response.data.history || !Array.isArray(response.data.history)) {
-        return res.status(500).json({ error: 'Invalid response from Polymarket API' });
-      }
-
-      formattedData = response.data.history.map(point => ({
-        t: new Date(point.t * 1000).toISOString(),
-        y: parseFloat(point.p)
-      }));
-    } else if (isKalshiMarket && condid && event_id) {
-      // Kalshi
-      try {
-        // Split market ID to get series ticker
-        const seriesTicker = marketId.split('-')[0];
-        const candlesticks = await getKalshiMarketCandlesticks(seriesTicker, marketId, startTs, endTs, periodInterval);
-
-        if (!candlesticks || !candlesticks.candlesticks || !Array.isArray(candlesticks.candlesticks)) {
-          return res.status(500).json({ error: 'Invalid response from Kalshi API' });
-        }
-
-        formattedData = candlesticks.candlesticks.map(candle => ({
-          t: new Date(candle.end_period_ts * 1000).toISOString(),
-          y: parseFloat(candle.yes_ask.close) / 100 // Convert cents to dollars and to a value between 0 and 1
-        }));
-      } catch (error) {
-        console.error('Error fetching Kalshi data:', error.response ? error.response.data : error.message);
-        return res.status(500).json({ error: 'Error fetching Kalshi data', details: error.response ? error.response.data : error.message });
-      }
-    } else {
-      return res.status(400).json({ error: 'Invalid market type or missing data' });
-    }
-
+    const formattedData = await fetchPriceHistory(
+      marketId, 
+      interval,
+      sql,
+      getCachedData,
+      setCachedData,
+      kalshiTokens
+    );
     res.json(formattedData);
   } catch (error) {
     console.error('Error fetching price history:', error);
-    res.status(500).json({ error: 'Error fetching price history', details: error.message });
+    res.status(500).json({ 
+      error: 'Error fetching price history', 
+      details: error.message 
+    });
   }
 });
 
