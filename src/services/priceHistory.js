@@ -6,11 +6,6 @@ const KALSHI_API_BASE_URL = process.env.KALSHI_API_BASE_URL || 'https://api.elec
 const KALSHI_EMAIL = process.env.KALSHI_EMAIL;
 const KALSHI_PASSWORD = process.env.KALSHI_PASSWORD;
 
-// Token storage with timestamps
-let kalshiTokens = {
-  elections: { token: null, userId: null, timestamp: null },
-  legacy: { token: null, userId: null, timestamp: null }
-};
 
 // Interval mapping configuration
 const intervalMap = {
@@ -23,14 +18,11 @@ const intervalMap = {
 };
 
 // Kalshi market candlesticks fetcher
-async function getKalshiMarketCandlesticks(seriesTicker, ticker, startTs, endTs, periodInterval, kalshiTokens) {
-  if (!kalshiTokens.elections.token || 
-      !kalshiTokens.elections.timestamp || 
-      Date.now() - kalshiTokens.elections.timestamp > 55 * 60 * 1000) {
+async function getKalshiMarketCandlesticks(seriesTicker, ticker, startTs, endTs, periodInterval) {
+  const { userId, token } = kalshiTokens.elections;
+  if (!userId || !token) {
     throw new Error('Kalshi authentication required');
   }
-
-  const { userId, token } = kalshiTokens.elections;
   const candlesticksUrl = `${process.env.KALSHI_API_BASE_URL}/series/${seriesTicker}/markets/${ticker}/candlesticks`;
   
   try {
@@ -59,7 +51,7 @@ async function getKalshiMarketCandlesticks(seriesTicker, ticker, startTs, endTs,
 }
 
 // Main price history fetcher
-async function fetchPriceHistory(marketId, interval, sql, getCachedData, setCachedData, kalshiTokens) {
+async function fetchPriceHistory(marketId, interval, sql, getCachedData, setCachedData) {
   const endTs = Math.floor(Date.now() / 1000);
   const { duration, periodInterval } = intervalMap[interval] || intervalMap['1m'];
   const startTs = endTs - duration;
@@ -78,13 +70,15 @@ async function fetchPriceHistory(marketId, interval, sql, getCachedData, setCach
     
     if (isKalshiMarket) {
       const seriesTicker = marketId.split('-')[0];
+      // Ensure we have valid auth tokens
+      await refreshKalshiAuth();
+      
       const candlesticks = await getKalshiMarketCandlesticks(
         seriesTicker, 
         marketId, 
         startTs, 
         endTs, 
-        periodInterval,
-        kalshiTokens
+        periodInterval
       );
 
       formattedData = candlesticks.candlesticks.map(candle => ({

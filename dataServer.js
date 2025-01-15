@@ -1218,30 +1218,6 @@ app.get('/api/news_results', async (req, res) => {
   }
 });
 
-async function loginToKalshi() {
-  const loginUrl = `${KALSHI_API_BASE_URL}/login`;
-  const loginPayload = {
-    email: KALSHI_EMAIL,
-    password: KALSHI_PASSWORD
-  };
-  
-  try {
-    const loginResponse = await axios.post(loginUrl, loginPayload, {
-      headers: { 'Content-Type': 'application/json' }
-    });
-    if (loginResponse.status !== 200) {
-      throw new Error(`Login failed: ${loginResponse.status} ${loginResponse.statusText}`);
-    }
-    const loginData = loginResponse.data;
-    return {
-      token: loginData.token,
-      userId: loginData.member_id
-    };
-  } catch (error) {
-    console.error('Kalshi login error:', error);
-    throw error;
-  }
-}
 
 // Initialize Polymarket orderbook client
 
@@ -1278,8 +1254,7 @@ app.get('/api/price_history', async (req, res) => {
       interval,
       sql,
       getCachedData,
-      setCachedData,
-      kalshiTokens
+      setCachedData
     );
     res.json(formattedData);
   } catch (error) {
