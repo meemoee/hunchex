@@ -158,16 +158,6 @@ class IndividualQuestions {
 }
 
 const { intervalMap, fetchPriceHistory } = require('./src/services/priceHistory');
-const KALSHI_API_BASE_URL = 'https://api.elections.kalshi.com/trade-api/v2';
-const KALSHI_API_FALLBACK_URL = 'https://trading-api.kalshi.com/trade-api/v2';
-const KALSHI_EMAIL = 'tem-tam@hotmail.com';
-const KALSHI_PASSWORD = '$P1derman';
-
-// Token storage with timestamps
-let kalshiTokens = {
-  elections: { token: null, userId: null, timestamp: null },
-  legacy: { token: null, userId: null, timestamp: null }
-};
 
 // In dataServer.js
 app.use(express.json()); // Ensure this is at the top of your middleware setup
@@ -225,49 +215,6 @@ app.post('/api/qa-trees/generate', async (req, res) => {
   }
 });
 
-async function authenticateKalshiLegacy() {
-  try {
-    const response = await axios.post(`${KALSHI_API_FALLBACK_URL}/login`, {
-      email: KALSHI_EMAIL,
-      password: KALSHI_PASSWORD
-    });
-    
-    if (response.status === 200) {
-      kalshiTokens.legacy = {
-        token: response.data.token,
-        userId: response.data.member_id,
-        timestamp: Date.now()
-      };
-      return kalshiTokens.legacy;
-    }
-    throw new Error('Legacy authentication failed');
-  } catch (error) {
-    console.error('Kalshi legacy authentication error:', error);
-    throw error;
-  }
-}
-
-async function authenticateKalshiElections() {
-  try {
-    const response = await axios.post(`${KALSHI_API_BASE_URL}/login`, {
-      email: KALSHI_EMAIL,
-      password: KALSHI_PASSWORD
-    });
-    
-    if (response.status === 200) {
-      kalshiTokens.elections = {
-        token: response.data.token,
-        userId: response.data.member_id,
-        timestamp: Date.now()
-      };
-      return kalshiTokens.elections;
-    }
-    throw new Error('Elections authentication failed');
-  } catch (error) {
-    console.error('Kalshi elections authentication error:', error);
-    throw error;
-  }
-}
 
 const CACHE_UPDATE_INTERVAL = 5 * 60 * 1000;
 const UNIQUE_TICKERS_UPDATE_INTERVAL = 15 * 60 * 1000;
@@ -1442,43 +1389,6 @@ app.post('/api/relevant_markets', async (req, res) => {
   }
 });
 
-async function getKalshiMarketCandlesticks(seriesTicker, ticker, startTs, endTs, periodInterval) {
-  // Check if elections token needs refresh (older than 55 minutes)
-  if (!kalshiTokens.elections.token || 
-      !kalshiTokens.elections.timestamp || 
-      Date.now() - kalshiTokens.elections.timestamp > 55 * 60 * 1000) {
-    await authenticateKalshiElections();
-  }
-
-  const { userId, token } = kalshiTokens.elections;
-  const candlesticksUrl = `${KALSHI_API_BASE_URL}/series/${seriesTicker}/markets/${ticker}/candlesticks`;
-  
-  console.log(`Fetching candlesticks from ${KALSHI_API_BASE_URL} for ticker: ${ticker}`);
-  
-  try {
-    const candlesticksResponse = await axios.get(candlesticksUrl, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `${userId} ${token}`
-      },
-      params: {
-        start_ts: startTs,
-        end_ts: endTs,
-        period_interval: periodInterval
-      }
-    });
-    
-    if (candlesticksResponse.status === 200 && 
-        candlesticksResponse.data?.candlesticks?.length > 0) {
-      return candlesticksResponse.data;
-    }
-    
-    throw new Error(`No candlesticks data returned from ${KALSHI_API_BASE_URL}`);
-  } catch (error) {
-    console.error(`Error fetching candlesticks from ${KALSHI_API_BASE_URL}:`, error);
-    throw error;
-  }
-}
     
 
 async function generateEmbedding(text) {

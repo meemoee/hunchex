@@ -2,6 +2,15 @@ const axios = require('axios');
 
 // Constants
 const POLY_API_URL = 'https://clob.polymarket.com';
+const KALSHI_API_BASE_URL = process.env.KALSHI_API_BASE_URL || 'https://api.elections.kalshi.com/trade-api/v2';
+const KALSHI_EMAIL = process.env.KALSHI_EMAIL;
+const KALSHI_PASSWORD = process.env.KALSHI_PASSWORD;
+
+// Token storage with timestamps
+let kalshiTokens = {
+  elections: { token: null, userId: null, timestamp: null },
+  legacy: { token: null, userId: null, timestamp: null }
+};
 
 // Interval mapping configuration
 const intervalMap = {
@@ -115,8 +124,41 @@ async function fetchPriceHistory(marketId, interval, sql, getCachedData, setCach
   }
 }
 
+// Kalshi authentication functions
+async function authenticateKalshiElections() {
+  try {
+    const response = await axios.post(`${KALSHI_API_BASE_URL}/login`, {
+      email: KALSHI_EMAIL,
+      password: KALSHI_PASSWORD
+    });
+    
+    if (response.status === 200) {
+      kalshiTokens.elections = {
+        token: response.data.token,
+        userId: response.data.member_id,
+        timestamp: Date.now()
+      };
+      return kalshiTokens.elections;
+    }
+    throw new Error('Elections authentication failed');
+  } catch (error) {
+    console.error('Kalshi elections authentication error:', error);
+    throw error;
+  }
+}
+
+async function refreshKalshiAuth() {
+  if (!kalshiTokens.elections.token || 
+      !kalshiTokens.elections.timestamp || 
+      Date.now() - kalshiTokens.elections.timestamp > 55 * 60 * 1000) {
+    await authenticateKalshiElections();
+  }
+  return kalshiTokens.elections;
+}
+
 module.exports = {
   intervalMap,
   getKalshiMarketCandlesticks,
-  fetchPriceHistory
+  fetchPriceHistory,
+  refreshKalshiAuth
 };
