@@ -87,10 +87,10 @@ async function fetchPriceHistory(marketId: string, interval: string = '1d'): Pro
   const data = await response.json()
   
   return data
-    .filter((item: {t: string, y: number}) => item.t && item.y !== undefined)
-    .map((item: {t: string, y: number}) => ({
-      time: Math.floor(new Date(item.t).getTime() / 1000),  // Convert ISO string to Unix timestamp
-      price: item.y * 100  // Convert decimal to percentage
+    .filter((item: PriceHistoryItem) => item.t && item.y !== undefined)
+    .map((item: PriceHistoryItem) => ({
+      time: Math.floor(new Date(item.t).getTime() / 1000),
+      price: item.y * 100
     }))
     .sort((a: PriceHistory, b: PriceHistory) => a.time - b.time)
 }
